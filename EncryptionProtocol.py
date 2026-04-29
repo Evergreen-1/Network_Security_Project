@@ -4,6 +4,7 @@ import nacl.bindings
 import nacl.public
 import time
 from Crypto.Hash import BLAKE2s
+import hashlib
 
 class EncryptionProtocol:
     SERVER_STATIC_PUBLIC_KEY=b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
@@ -25,9 +26,16 @@ class EncryptionProtocol:
         #todo needs both an encrypt and a decrypt version.
         return
     
-    def Hash(self):
-        #todo hash function
-        return
+    def Hash(self, message): #working
+        #Using Blake2s from WireGuard Paper
+        #Note: the message it takes is a string, does allow for either inputs but it needs to be encoded with UTF-8
+        if isinstance(message, bytes):
+            data = message
+        else:
+            data = message.encode("UTF-8")
+        hash_obj = hashlib.blake2s(digest_size=32)
+        hash_obj.update(data)
+        return  hash_obj.digest()
 
     def MixHash(self):
         #todo This function is not defined in the paper, but will be a useful convenience function 
@@ -119,6 +127,10 @@ class EncryptionProtocol:
         t = self.Timestamp()
         print(t)
         print("===TimeStamp Complete===")
+
+        hash_test = self.Hash(b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s')
+        print(hash_test)
+        print("===Hash Complete===")
 
 
 if __name__ == "__main__":
