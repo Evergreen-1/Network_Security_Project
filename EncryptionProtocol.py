@@ -37,15 +37,22 @@ class EncryptionProtocol:
         hash_obj.update(data)
         return  hash_obj.digest()
 
-    def MixHash(self):
+    def MixHash(self, message1, message2):  #working
         #todo This function is not defined in the paper, but will be a useful convenience function 
         # because a number of operations require the hash of concatenated inputs. 
         # Use whenever you see Hash(.. || ..) in the paper.
-        return
+        message = message1 + message2
+        return self.Hash(message)
     
-    def Mac(self):
+    def Mac(self, key, input): #working
         #todo
-        return
+        #Allows bytes or string input
+        if isinstance(input, bytes):
+            data = input
+        else:
+            data = input.encode("UTF-8")
+        mac_obj = hashlib.blake2s(data=data, key=key, digest_size=16)
+        return mac_obj.digest()
     
     def Hmac(self):
         #todo
@@ -114,6 +121,7 @@ class EncryptionProtocol:
 
 
     def main(self):
+        #testing phase
         print("test")
         (self.private_key, self.public_key)=self.DH_Generate()
         print(self.private_key) 
@@ -129,8 +137,23 @@ class EncryptionProtocol:
         print("===TimeStamp Complete===")
 
         hash_test = self.Hash(b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s')
-        print(hash_test)
+        t_H = True if hash_test == b"`\xe2m\xae\xf3'\xef\xc0.\xc35\xe2\xa0%\xd2\xd0\x16\xebB\x06\xf8rw\xf5-8\xd1\x98\x8bx\xcd6" else False
+        print(t_H)
         print("===Hash Complete===")
+
+        input1 = b'a'*50
+        input2 = b'b'*50
+        t_MH = True if self.MixHash(input1, input2) == b'#B\x17\x17\xbe=\xfcc\xd6\xb5@81\t\x8dh\x88\x9b\xb3\xa8\xb9\xb2n\n\x02\r:\xcb\xbe\xb0\xa7\xee' else False
+        print(t_MH)
+        print("===MixHash Complete===")
+
+        key_mac = b':\xb6\x90\xbd\n:\x18Z88"\xd8a\x08\x9f\xa7\x9c\xc7\xcb\x01\x99-\xfd\x9cGX\xdc\x9dO\x0c\xb3@'
+        mac_input = b'I am a message without a MAC, but only for now.'
+        t_M = True if self.Mac(key_mac, mac_input) == b'*\xbd\x8ak4%\xe4\xb0\xe7\x96\xe5z\x14q\xdd!' else False
+        print(t_M)
+        print("===Mac Complete===")
+
+
 
 
 if __name__ == "__main__":
