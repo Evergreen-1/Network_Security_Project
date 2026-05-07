@@ -54,14 +54,20 @@ class EncryptionProtocol:
         mac_obj = hashlib.blake2s(data=data, key=key, digest_size=16)
         return mac_obj.digest()
     
-    def Hmac(self, key, input): 
-        #todo
-        if isinstance(input, bytes):
-            data = input
+    def Hmac(self, key, input): #working
+        # HMac(key, input) = H((K' XOR opad) || H((K' XOR ipad) || input))
+        # Where K'= {H(K) if len(K) > blocksize; else K }
+
+        if len(key) > 64:   # getting K'
+            key_p = self.Hash(key)
         else:
-            data = input.encode("UTF-8")
-        hmac_obj = hashlib.blake2s(data=data, key=key, digest_size=32)
-        return hmac_obj.digest()
+            key_p = key + (b'\x00' * (64 - len(key)))  # pad right to 64 bytes
+
+        outer = bytes(a ^ b for a, b in zip(key_p, b'\x5c' * 64))   # getting K' XOR outer pad
+        inner = bytes(a ^ b for a, b in zip(key_p, b'\x36' * 64))   # getting K'XOR inner pad
+
+        return self.Hash(outer + self.Hash(inner + input))  # 
+
 
     def Kdf(self):
         #todo There are three Kdf()-derived functions to create. 
@@ -162,7 +168,7 @@ class EncryptionProtocol:
         hmac_input = b'I am a message without an HMAC, but only for now.'
         t_HM = True if self.Hmac(key_hmac, hmac_input) == b'\x1ew,:\x03\xdd\x0b\x1e\x96\n\x00J\x8c\xe1QzQ\xff\xb8\x02\xcb\xa29\xa8{\x00\x07(\xa6\xc0\x07\xde' else False
         print(t_HM)
-        print(self.Hmac(key_hmac, hmac_input))
+        #print(self.Hmac(key_hmac, hmac_input))
         print("===HMac Complete===")
 
 
