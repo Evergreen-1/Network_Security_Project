@@ -66,17 +66,40 @@ class EncryptionProtocol:
         outer = bytes(a ^ b for a, b in zip(key_p, b'\x5c' * 64))   # getting K' XOR outer pad
         inner = bytes(a ^ b for a, b in zip(key_p, b'\x36' * 64))   # getting K'XOR inner pad
 
-        return self.Hash(outer + self.Hash(inner + input))  # 
+        return self.Hash(outer + self.Hash(inner + input)) 
 
 
-    def Kdf(self):
+    def KDF1(self, key, input):
         #todo There are three Kdf()-derived functions to create. 
         # Carefully read the specification for their construction
-        return
+        p_random = self.Hmac(key, input)
+        t1 = self.Hmac(p_random, b'\x01')
+        return t1
+    
+    def KDF2(self, key, input):
+        #todo There are three Kdf()-derived functions to create. 
+        # Carefully read the specification for their construction
+        p_random = self.Hmac(key, input)
+        t1 = self.Hmac(p_random, b'\x01')
+        t2 = self.Hmac(p_random, t1 + b'\x02')
+        return (t1, t2)
+    
+    def KDF3(self, key, input):
+        #todo There are three Kdf()-derived functions to create. 
+        # Carefully read the specification for their construction
+        p_random = self.Hmac(key, input) 
+        t1 = self.Hmac(p_random, b'\x01')
+        t2 = self.Hmac(p_random, t1 + b'\x02')
+        t3 = self.Hmac(p_random, t2 + b'\x03')
+        return (t1, t2, t3)
 
-    def Timestamp(self): #working
-        #Timestamp() returns the current systme time of the machine.
-        return time.time()
+    def Timestamp(self, t): #working
+        #Timestamp() Returns the TAI64N timestamp of the current time, which is 12 bytes of output, the first 8
+        #bytes being a big-endian integer of the number of seconds since 1970 TAI and the last 4 bytes being a
+        #big-endian integer of the number of nanoseconds from the beginning of that second. - From WireGaurd paper
+        seconds = int(t)
+        nanoseconds = int((t%1) * 1e9)  #modding for remainder and x 10^9 to get whole number of nano-secs
+        return seconds.to_bytes(8, 'big') + nanoseconds.to_bytes(4, 'big')
     
     def send_prep(self, msg):
         #main test for now
@@ -143,7 +166,7 @@ class EncryptionProtocol:
         print(key)
         print("===DH_Generate Complete===")
 
-        t = self.Timestamp()
+        t = self.Timestamp(time.time())
         print(t)
         print("===TimeStamp Complete===")
 
@@ -170,6 +193,21 @@ class EncryptionProtocol:
         print(t_HM)
         #print(self.Hmac(key_hmac, hmac_input))
         print("===HMac Complete===")
+
+        key = b':\xb6\x90\xbd\n:\x18Z88"\xd8a\x08\x9f\xa7\x9c\xc7\xcb\x01\x99-\xfd\x9cGX\xdc\x9dO\x0c\xb3@'
+        input = b'Choose your LLM adventure folks.'
+        t_KDF1 = True if self.KDF1(key, input) == b'0fO\x0e\x0f\xb2\xf4\xaa\xcc\x14\x9c\x84\x8a\xb0D\xd3i\xa6\xac\xbf\xae\xdc^\xd0-D"64X\x93W' else False
+        print(t_KDF1)
+        out2 = (b'0fO\x0e\x0f\xb2\xf4\xaa\xcc\x14\x9c\x84\x8a\xb0D\xd3i\xa6\xac\xbf\xae\xdc^\xd0-D"64X\x93W', b'\xaa\x9b\x0fh\xf9\x99z\\%\\\x0f\x8c9L\x7f~<\x1f\xa9G\x9d \x1dw\xba\xc3\x96\x9e\xbb\x8f\x12&')
+        t_KDF2 = True if self.KDF2(key, input) == out2 else False
+        print(t_KDF2)
+        out3 = (b'0fO\x0e\x0f\xb2\xf4\xaa\xcc\x14\x9c\x84\x8a\xb0D\xd3i\xa6\xac\xbf\xae\xdc^\xd0-D"64X\x93W', b'\xaa\x9b\x0fh\xf9\x99z\\%\\\x0f\x8c9L\x7f~<\x1f\xa9G\x9d \x1dw\xba\xc3\x96\x9e\xbb\x8f\x12&', b'\\\xfb\xc9\xf8!\x88\x03\xa1u\xa8!gUk\xfd\x8b4E|\n5\x89\xb1\xb6\xc1\x1a\x8f\xae?\\\xac)')
+        t_KDF3 = True if self.KDF3(key, input) == out3 else False
+        print(t_KDF3)
+        #print(self.Hmac(key_hmac, hmac_input))
+        print("===KDF Complete===")
+
+        
 
 
 
