@@ -4,6 +4,7 @@ import nacl.bindings
 import nacl.public
 import time
 from Crypto.Hash import BLAKE2s
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import hashlib
 
 class EncryptionProtocol:
@@ -22,9 +23,16 @@ class EncryptionProtocol:
         private = nacl.public.PrivateKey.generate()
         return (private, private.public_key)
     
-    def AEAD(self):
+    def AEAD_encrpyt(self, key, counter, plain_text, auth_text):
         #todo needs both an encrypt and a decrypt version.
-        return
+        chacha = ChaCha20Poly1305(key)
+        nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
+        return chacha.encrypt(nonce, plain_text, auth_text)
+    
+    def AEAD_decrypt(self, key, counter, cipher_text, auth_text):
+        chacha = ChaCha20Poly1305(key)
+        nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
+        return chacha.decrypt(nonce, cipher_text, auth_text)
     
     def Hash(self, message): #working
         #Using Blake2s from WireGuard Paper
@@ -64,7 +72,7 @@ class EncryptionProtocol:
             key_p = key + (b'\x00' * (64 - len(key)))  # pad right to 64 bytes
 
         outer = bytes(a ^ b for a, b in zip(key_p, b'\x5c' * 64))   # getting K' XOR outer pad
-        inner = bytes(a ^ b for a, b in zip(key_p, b'\x36' * 64))   # getting K'XOR inner pad
+        inner = bytes(a ^ b for a, b in zip(key_p, b'\x36' * 64))   # getting K' XOR inner pad
 
         return self.Hash(outer + self.Hash(inner + input)) 
 
@@ -204,10 +212,23 @@ class EncryptionProtocol:
         out3 = (b'0fO\x0e\x0f\xb2\xf4\xaa\xcc\x14\x9c\x84\x8a\xb0D\xd3i\xa6\xac\xbf\xae\xdc^\xd0-D"64X\x93W', b'\xaa\x9b\x0fh\xf9\x99z\\%\\\x0f\x8c9L\x7f~<\x1f\xa9G\x9d \x1dw\xba\xc3\x96\x9e\xbb\x8f\x12&', b'\\\xfb\xc9\xf8!\x88\x03\xa1u\xa8!gUk\xfd\x8b4E|\n5\x89\xb1\xb6\xc1\x1a\x8f\xae?\\\xac)')
         t_KDF3 = True if self.KDF3(key, input) == out3 else False
         print(t_KDF3)
-        #print(self.Hmac(key_hmac, hmac_input))
         print("===KDF Complete===")
 
-        
+
+        key = b':\xb6\x90\xbd\n:\x18Z88"\xd8a\x08\x9f\xa7\x9c\xc7\xcb\x01\x99-\xfd\x9cGX\xdc\x9dO\x0c\xb3@'
+        counter = b'\x00'*12 # Read the standard carefully for how this must be formatted
+        plaintext = b"attack at dawn"
+        authtext = b'\x8e2\x89\xe2\x14\xfd\x16\x19o\x06\xc9\xb2\xd9\xe8F\xfd\xdaf\xdc\xa4\xf9\xe9\x98\xbc\xd8x\xb9\x90\x1e\n\xac\x98'
+
+        outen = b'\xfbv\x84\xea\xd0S\n\xc1\x16\x9et\xd5\xa4/\xeee\x9a\xa9MR\xe3\xd5p3\x85\r\xce\x15r\xcd'
+        t_en = True if self.AEAD_encrpyt(key, counter, plaintext, authtext) == outen else False
+        print(t_en)
+        outde = b'attack at dawn'
+        t_de = True if self.AEAD_decrypt(key, counter, outen, authtext) == outde else False
+        print(t_de)
+        print("===AEAD Complete===")
+
+
 
 
 
