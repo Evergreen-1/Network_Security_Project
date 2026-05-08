@@ -11,8 +11,10 @@ class EncryptionProtocol:
     SERVER_STATIC_PUBLIC_KEY=b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
     private_key = None
     public_key = None
-    def encrypt(self, msg):
-        return msg
+
+    #Worked example testing keys:
+    t_client_private_key = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
+    t_server_public_key = b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
     
     def DH(self, private_key, public_key): #working
         # The Private & Public key input parameters need to be parsed in bytes via bytes() function.
@@ -26,12 +28,18 @@ class EncryptionProtocol:
     def AEAD_encrpyt(self, key, counter, plain_text, auth_text):
         #todo needs both an encrypt and a decrypt version.
         chacha = ChaCha20Poly1305(key)
-        nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
+        if isinstance(counter, int):
+            nonce = (b'\x00' * 4) + counter.to_bytes(8, 'little')
+        else:
+            nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
         return chacha.encrypt(nonce, plain_text, auth_text)
     
     def AEAD_decrypt(self, key, counter, cipher_text, auth_text):
         chacha = ChaCha20Poly1305(key)
-        nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
+        if isinstance(counter, int):
+            nonce = (b'\x00' * 4) + counter.to_bytes(8, 'little')
+        else:
+            nonce = (b'\x00' * 4) + int.from_bytes(counter).to_bytes(8, 'little')
         return chacha.decrypt(nonce, cipher_text, auth_text)
     
     def Hash(self, message): #working
@@ -78,23 +86,20 @@ class EncryptionProtocol:
 
 
     def KDF1(self, key, input):
-        #todo There are three Kdf()-derived functions to create. 
-        # Carefully read the specification for their construction
+        #KDF1 Look at WireGaurd paper
         p_random = self.Hmac(key, input)
         t1 = self.Hmac(p_random, b'\x01')
         return t1
     
     def KDF2(self, key, input):
-        #todo There are three Kdf()-derived functions to create. 
-        # Carefully read the specification for their construction
+        #KDF2 Look at WireGaurd paper
         p_random = self.Hmac(key, input)
         t1 = self.Hmac(p_random, b'\x01')
         t2 = self.Hmac(p_random, t1 + b'\x02')
         return (t1, t2)
     
     def KDF3(self, key, input):
-        #todo There are three Kdf()-derived functions to create. 
-        # Carefully read the specification for their construction
+        #KDF3 Look at WireGaurd paper
         p_random = self.Hmac(key, input) 
         t1 = self.Hmac(p_random, b'\x01')
         t2 = self.Hmac(p_random, t1 + b'\x02')
@@ -104,37 +109,43 @@ class EncryptionProtocol:
     def Timestamp(self, t): #working
         #Timestamp() Returns the TAI64N timestamp of the current time, which is 12 bytes of output, the first 8
         #bytes being a big-endian integer of the number of seconds since 1970 TAI and the last 4 bytes being a
-        #big-endian integer of the number of nanoseconds from the beginning of that second. - From WireGaurd paper
-        seconds = int(t)
-        nanoseconds = int((t%1) * 1e9)  #modding for remainder and x 10^9 to get whole number of nano-secs
+        #big-endian integer of the number of microseconds from the beginning of that second. - From WireGaurd paper
+        #NOTE: +10 and e6 were made to comply with worked exapmle, change to +37 and e9 if server doesnt work
+        TAI64_OFFSET = (2**62) + 10     # +10 leap seconds to match server time
+        seconds = int(t) + TAI64_OFFSET
+        nanoseconds = int((t%1) * 1e6)  #modding for remainder and x 10^6 to get whole number of micro-secs
         return seconds.to_bytes(8, 'big') + nanoseconds.to_bytes(4, 'big')
     
-    def send_prep(self, msg):
-        #main test for now
-        # chain_key = Hash(Construction)
+    def send_prep(self, Construction, Identifier):
+    
+        chain_key = self.Hash(Construction)
+        hash = self.MixHash(chain_key,Identifier)
 
-        # hash = Hash(chain_key || Identifier)
+        hash = self.MixHash(hash, self.t_server_public_key)
+        (E_I_priv, E_I_pub) = self.DH_Generate()
+        # debugging - E_I_priv = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
+        # debugging - E_I_pub = b"\xb1\x13\xb4\xd3\x00R'\x8b\x80\xd1\xcc\xc8X\x1bYf(4\xce&\xd0V\xde\x97\xff\xba2$u\x9b\xe3G" 
 
-        # hash = Hash(hash || S_R_pub)
+        chain_key = self.KDF1(chain_key, E_I_pub)   #linking chain key with ephemeral
+        hash = self.MixHash(hash, E_I_pub)
 
-        # (E_I_priv, E_I_pub) = DH-Generate()
+        (chain_key, key1) = self.KDF2(chain_key, self.DH(E_I_priv, self.t_server_public_key)) #linking chain key with ephemeral + server key
+        msg_static = self.AEAD_encrpyt(key1, 0, self.public_key, hash)  #encrypt
+        hash = self.MixHash(hash, msg_static)
 
-        # chain_key = Kdf1(chain_key, E_I_pub)
+        #Debugging
+        #print("Pre timestamp Hash test")
+        #if (hash == b'\x82\xc6E\xc2\xa3\xf4\xe83\x81\x99_\xf64kx-\xff\x18\x1e9XL:[\xb5N\xdb\x1f\xf4\xafP '):
+        #    print(True)
+        #else:
+        #    print(False)
+        #    print(hash)
 
-        # hash = Hash(hash || E_I_pub)
-
-        # (chain_key, key1) = Kdf2(chain_key, DH(E_I_priv, S_R_pub))
-
-        # msg_static = AEAD(key1, 0, S_I_pub, hash), an encryption operation
-
-        # hash = Hash(hash || msg_static)
-
-        # (chain_key, key2) = Kdf2(chain_key, DH(S_I_priv, S_R_pub))
-
-        # timestamp = AEAD(key2, 0, Timestamp(), hash), an encryption operation
-
-        # hash = Hash(hash || msg_timestamp)
-        return
+        (chain_key, key2) = self.KDF2(chain_key, self.DH(self.t_client_private_key, self.t_server_public_key))
+        # NOTE: In the above example, Timestamp() returned the value 1744377020.21733
+        msg_timestamp = self.AEAD_encrpyt(key2, 0, self.Timestamp(time.time()), hash)
+        hash = self.MixHash(hash, msg_timestamp)
+        return (E_I_pub, msg_static, msg_timestamp, hash)
     
     def recieve_prep(self, msg):
         # The chain_key and hash are maintained through the initiation sequence, 
@@ -228,6 +239,43 @@ class EncryptionProtocol:
         print(t_de)
         print("===AEAD Complete===")
 
+
+        #===Send prep testing===
+        Constructor = b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s'
+        Identifier = b'WireGuard v1 zx2c4 Jason@zx2c4.com'
+
+        type = b'\x01'
+        reserved = b'\x00'*3
+        sender = 4001697114 # Random number, fixed for this worked example
+
+        cl_priv_key_obj = nacl.public.PrivateKey(self.t_client_private_key)
+        self.public_key = bytes(cl_priv_key_obj.public_key)
+        (E_I_pub, msg_static, msg_timestamp, hash) = self.send_prep(Constructor, Identifier)
+        ephemeral = E_I_pub
+        static = msg_static
+        timestamp = msg_timestamp
+        msg = b"\x01\x00\x00\x00Z\r\x85\xee\xb1\x13\xb4\xd3\x00R'\x8b\x80\xd1\xcc\xc8X\x1bYf(4\xce&\xd0V\xde\x97\xff\xba2$u\x9b\xe3G\xc7\x12ry\x04\xb9\xc3\xaf\x9a\xf4\x7f \xf1\x98\xf3rA\x9d\x92\x0f\xaea[=\xf5N\xe0]Q\x9a\x88\x855\xb046\xb5\xefk\xf4z\xcd#\x0c\x0c\xcd<\xda\xc6?XF\x845JvXfm\xf9\xfa0\xf4\xb2\x18\xd6\xf9\x046\x17z\x08\x16y\xa9\xa5"
+
+
+
+        out = b'r\xdb\rg\x14\xa2\xff\x13h\xf8K\x9dL\xec\x81\xbf\xa6Q\x15\xf3\xeb\xd7{\x87\xa5\x8bs\xc8\xb4k\x8e\x1e'
+        t_send = True if hash == out else False
+        print(t_send)
+        print(hash)
+        out_timestamp = b'\xc6?XF\x845JvXfm\xf9\xfa0\xf4\xb2\x18\xd6\xf9\x046\x17z\x08\x16y\xa9\xa5'
+        t_send = True if msg_timestamp == out_timestamp else False
+        print(t_send)
+        print(msg_timestamp)
+        out_msg = b'\xc7\x12ry\x04\xb9\xc3\xaf\x9a\xf4\x7f \xf1\x98\xf3rA\x9d\x92\x0f\xaea[=\xf5N\xe0]Q\x9a\x88\x855\xb046\xb5\xefk\xf4z\xcd#\x0c\x0c\xcd<\xda'
+        t_send = True if msg_static == out_msg else False
+        print(t_send)
+        print(msg_static)
+        print("===Send===")
+        mac1 = self.Mac(self.Hash(b"mac1----" + self.t_server_public_key), msg)
+        mac2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+
+
+         #===Recieve prep testing===
 
 
 
