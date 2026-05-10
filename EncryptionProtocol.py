@@ -126,10 +126,10 @@ class EncryptionProtocol:
         # debugging - E_I_priv = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
         # debugging - E_I_pub = b"\xb1\x13\xb4\xd3\x00R'\x8b\x80\xd1\xcc\xc8X\x1bYf(4\xce&\xd0V\xde\x97\xff\xba2$u\x9b\xe3G" 
 
-        chain_key = self.KDF1(chain_key, E_I_pub)   #linking chain key with ephemeral
-        hash = self.MixHash(hash, E_I_pub)
+        chain_key = self.KDF1(chain_key, bytes(E_I_pub))   #linking chain key with ephemeral
+        hash = self.MixHash(hash, bytes(E_I_pub))
 
-        (chain_key, key1) = self.KDF2(chain_key, self.DH(E_I_priv, self.t_server_public_key)) #linking chain key with ephemeral + server key
+        (chain_key, key1) = self.KDF2(chain_key, self.DH(bytes(E_I_priv), self.t_server_public_key)) #linking chain key with ephemeral + server key
         msg_static = self.AEAD_encrpyt(key1, 0, self.public_key, hash)  #encrypt
         hash = self.MixHash(hash, msg_static)
 
@@ -152,7 +152,7 @@ class EncryptionProtocol:
         # linking the initiation and response messages together:
 
         # chain_key = Kdf1(chain_key, E_R_pub)
-
+        chain_key = self.KDF1(chain_key, E_R_pub)
         # msg_ephemeral = E_R_pub
 
         # Hash(hash || msg_ephemeral)
