@@ -11,6 +11,7 @@ class EncryptionProtocol:
     SERVER_STATIC_PUBLIC_KEY=b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
     private_key = None
     public_key = None
+    DEBUG = True
 
     #Worked example testing keys:
     t_client_private_key = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
@@ -147,33 +148,38 @@ class EncryptionProtocol:
         hash = self.MixHash(hash, msg_timestamp)
         return (E_I_pub, msg_static, msg_timestamp, hash)
     
-    def recieve_prep(self, msg):
-        # The chain_key and hash are maintained through the initiation sequence, 
-        # linking the initiation and response messages together:
+    def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_cipher):
+        Q = b'\x00' * 32  # No pre-shared key, set to 0^32 per Wireguard paper
 
         # chain_key = Kdf1(chain_key, E_R_pub)
-        chain_key = self.KDF1(chain_key, E_R_pub)
         # msg_ephemeral = E_R_pub
-
-        # Hash(hash || msg_ephemeral)
-
+        # hash = Hash(hash || msg_ephemeral)
         # chain_key = Kdf1(chain_key, DH(E_I_priv, E_R_pub))
-
         # chain_key = Kdf1(chain_key, DH(S_I_priv, E_R_pub))
+       # (chain_key, tmp, key3) = Kdf3(chain_key, Q)
+        # hash = Hash(hash || tmp)
+        # msg_empty = AEAD(key3, 0, empty_cipher, hash) — decryption
+        # hash = Hash(hash || msg_empty) 
+        chain_key = self.KDF1(chain_key, E_R_pub)
+        msg_ephemeral = E_R_pub
+        hash = self.MixHash(hash, msg_ephemeral)
+        chain_key = self.KDF1(chain_key, self.DH(E_I_priv, E_R_pub))
+        chain_key = self.KDF1(chain_key, self.DH(S_I_priv, E_R_pub))
+        (chain_key, tmp, key3) = self.KDF3(chain_key, Q)
+        hash = self.MixHash(hash, tmp)
 
-        # (chain_key, tmp, key3) = Kdf3(chain_key, Q)
+        msg_text = self.AEAD_decrypt(key3, 0, msg_cipher, hash)
+        hash = self.MixHash(hash, msg_text)
 
-        # Hash(hash || tmp)
+    # Section 5.4.5 — Transport Data Key Derivation
+        (sending_key, receiving_key) = self.KDF2(chain_key, b'')
+        N_send = 0
+        N_recv = 0
 
-        # msg_empty = AEAD(key3, 0, empty, hash), a decryption operation
-
-        # Hash(hash || msg_empty)
-
-        return msg
-    
+        return (hash, sending_key, receiving_key, N_send, N_recv, msg_text)
 
 
-    def main(self):
+    def testing(self):
         #testing phase
         print("test")
         (self.private_key, self.public_key)=self.DH_Generate()
@@ -256,8 +262,6 @@ class EncryptionProtocol:
         timestamp = msg_timestamp
         msg = b"\x01\x00\x00\x00Z\r\x85\xee\xb1\x13\xb4\xd3\x00R'\x8b\x80\xd1\xcc\xc8X\x1bYf(4\xce&\xd0V\xde\x97\xff\xba2$u\x9b\xe3G\xc7\x12ry\x04\xb9\xc3\xaf\x9a\xf4\x7f \xf1\x98\xf3rA\x9d\x92\x0f\xaea[=\xf5N\xe0]Q\x9a\x88\x855\xb046\xb5\xefk\xf4z\xcd#\x0c\x0c\xcd<\xda\xc6?XF\x845JvXfm\xf9\xfa0\xf4\xb2\x18\xd6\xf9\x046\x17z\x08\x16y\xa9\xa5"
 
-
-
         out = b'r\xdb\rg\x14\xa2\xff\x13h\xf8K\x9dL\xec\x81\xbf\xa6Q\x15\xf3\xeb\xd7{\x87\xa5\x8bs\xc8\xb4k\x8e\x1e'
         t_send = True if hash == out else False
         print(t_send)
@@ -276,7 +280,37 @@ class EncryptionProtocol:
 
 
          #===Recieve prep testing===
+        chain_key = b'\xe0\\UH\\\x12\x9a\xb4\xcc\xd0\r\xa9\xd2\xac\xc7\xb1]ky\xdc\xc2\x18\xb8\x95]NQ\xf9=\xcd\xa5\xc3'
+        hash      = b'r\xdb\rg\x14\xa2\xff\x13h\xf8K\x9dL\xec\x81\xbf\xa6Q\x15\xf3\xeb\xd7{\x87\xa5\x8bs\xc8\xb4k\x8e\x1e'
 
+        # Generated server response packet
+        response_msg = b'\x02\x00\x00\x00D\xe6+\xe3Z\r\x85\xee\xe5\xd0!\x98z\x12\xb5\xf8&\x17\xfe\x14K\x9exe(\x1bK\xc2\x8e\x15T\x81\xcc\xbe\xceq$\x82v\x7f\x0b\xa1\xfc>\xdf\xb4\xe0\x96Pc\x15\xfe\x9b7\xdc\xb1\x18l\xa4sk\xfd"r\xa5z\x03\x1eu\xdd=\xd9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        # Use the hex output from the generator above
+        #response_msg = bytes.fromhex("0200000044e62be35a0d85eee5d021987a12b5f82617fe144b9e7865281b4bc28e155481ccbece712482767f43409ec8e0d79a9d719da92ffb16dfd207b5732006881efe0a")
+        # Parse fields
+        E_R_pub          = response_msg[12:44]
+        msg_empty_cipher = response_msg[44:60]  # 16-byte auth tag
+
+        E_I_priv = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
+        S_I_priv = self.t_client_private_key
+
+        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_empty_cipher)
+
+        # Verify
+        assert sending_key   == b'\xd0\x98\xff\xa8\xf4u&\xc4$\x94\xcd&*X\xbfc\x91_\xc3ls\xd1\x1f\xff=\xd4<\x92\xc6\xb5\xb0q'
+        assert receiving_key == b'\x032\xb2\xbe\xae"<\'}\x97\x08@w\x98\x10l\xb9\xd4|\xc7\x02\xc4\xefE\x18K\x05\x92\xe0d\x8e\xce'
+        print(True)
+        print(hash)
+        print(msg_text)
+        print("===Receive Complete===")
+
+
+    def main(self):
+        if self.DEBUG:
+            print("Testing")
+            self.testing()
+
+        print("Main")
 
 
 
