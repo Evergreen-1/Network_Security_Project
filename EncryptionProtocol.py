@@ -13,6 +13,13 @@ class EncryptionProtocol:
     public_key = None
     DEBUG = True
 
+    #Potential class varaibles
+    sending_key   = None
+    receiving_key = None
+    N_send        = 0
+    N_recv        = 0
+    sender_index  = None
+
     #Worked example testing keys:
     t_client_private_key = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
     t_server_public_key = b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
@@ -146,17 +153,16 @@ class EncryptionProtocol:
         # NOTE: In the above example, Timestamp() returned the value 1744377020.21733
         msg_timestamp = self.AEAD_encrpyt(key2, 0, self.Timestamp(time.time()), hash)
         hash = self.MixHash(hash, msg_timestamp)
-        return (E_I_pub, msg_static, msg_timestamp, hash)
+        return (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash)
     
-    def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_cipher):
-        Q = b'\x00' * 32  # No pre-shared key, set to 0^32 per Wireguard paper
-
+    # You need E_I_priv and S_I_priv passed in
+    def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_cipher, Q):
         # chain_key = Kdf1(chain_key, E_R_pub)
         # msg_ephemeral = E_R_pub
         # hash = Hash(hash || msg_ephemeral)
         # chain_key = Kdf1(chain_key, DH(E_I_priv, E_R_pub))
         # chain_key = Kdf1(chain_key, DH(S_I_priv, E_R_pub))
-       # (chain_key, tmp, key3) = Kdf3(chain_key, Q)
+        # (chain_key, tmp, key3) = Kdf3(chain_key, Q)
         # hash = Hash(hash || tmp)
         # msg_empty = AEAD(key3, 0, empty_cipher, hash) — decryption
         # hash = Hash(hash || msg_empty) 
@@ -171,13 +177,31 @@ class EncryptionProtocol:
         msg_text = self.AEAD_decrypt(key3, 0, msg_cipher, hash)
         hash = self.MixHash(hash, msg_text)
 
-    # Section 5.4.5 — Transport Data Key Derivation
+        # Section 5.4.5 — Transport Data Key Derivation
         (sending_key, receiving_key) = self.KDF2(chain_key, b'')
         N_send = 0
         N_recv = 0
 
         return (hash, sending_key, receiving_key, N_send, N_recv, msg_text)
 
+
+    def encrypt_transport(self, plaintext):
+        # msg_packet = AEAD(sending_key, N_send, plaintext, empty_auth)
+        # Auth text is empty (b'') for transport messages
+        if isinstance(plaintext, str):
+            plaintext = plaintext.encode('utf-8')
+        ciphertext = self.AEAD_encrpyt(self.sending_key, self.N_send, plaintext, b'')
+    
+        # Assemble transport packet
+        msg_type       = b'\x04'
+        reserved       = b'\x00' * 4
+        receiver_index = self.sender_index.to_bytes(4, 'little')
+        counter        = self.N_send.to_bytes(8, 'little')
+    
+        self.N_send += 1  # increment counter after each message
+    
+        packet = msg_type + reserved + receiver_index + counter + ciphertext
+        return packet
 
     def testing(self):
         #testing phase
@@ -256,7 +280,7 @@ class EncryptionProtocol:
 
         cl_priv_key_obj = nacl.public.PrivateKey(self.t_client_private_key)
         self.public_key = bytes(cl_priv_key_obj.public_key)
-        (E_I_pub, msg_static, msg_timestamp, hash) = self.send_prep(Constructor, Identifier)
+        (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash) = self.send_prep(Constructor, Identifier)
         ephemeral = E_I_pub
         static = msg_static
         timestamp = msg_timestamp
@@ -293,8 +317,10 @@ class EncryptionProtocol:
 
         E_I_priv = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
         S_I_priv = self.t_client_private_key
+        Q = b'\x00' * 32  # No pre-shared key, set to 0^32 per Wireguard paper
 
-        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_empty_cipher)
+
+        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, S_I_priv, msg_empty_cipher, Q)
 
         # Verify
         assert sending_key   == b'\xd0\x98\xff\xa8\xf4u&\xc4$\x94\xcd&*X\xbfc\x91_\xc3ls\xd1\x1f\xff=\xd4<\x92\xc6\xb5\xb0q'
@@ -311,6 +337,9 @@ class EncryptionProtocol:
             self.testing()
 
         print("Main")
+
+        ''' NOTE in order to send a message with a payload you have to do the following steps:
+                1. '''
 
 
 
