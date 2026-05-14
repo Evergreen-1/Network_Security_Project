@@ -3,25 +3,25 @@
 import nacl.bindings
 import nacl.public
 import time
-from Crypto.Hash import BLAKE2s
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import hashlib
 import random
 
 class EncryptionProtocol:
     SERVER_STATIC_PUBLIC_KEY=b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
-    client_private_key = None
-    client_public_key = None
+    client_private_key = None   #NOTE Need to get from website
+    client_public_key = None    #NOTE ^    
     DEBUG = True
 
-    #Potential class varaibles
+    #Class varaibles
     sending_key   = None
     receiving_key = None
     N_send        = 0
     N_recv        = 0
     server_index  = None        #The servers index
-    client_sender_index = None
-
+    client_sender_index = None  #basically sessionID
+    hash = None
+    chain_key = None
 
     #Worked example testing keys:
     t_client_private_key = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
@@ -158,8 +158,9 @@ class EncryptionProtocol:
         hash = self.MixHash(hash, msg_timestamp)
         return (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash)
     
-    # You need E_I_priv and S_I_priv passed in
     def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, private_key, msg_cipher, Q):
+        '''Deciphering response's wireguard protocol'''
+        # Worked example format
         # chain_key = Kdf1(chain_key, E_R_pub)
         # msg_ephemeral = E_R_pub
         # hash = Hash(hash || msg_ephemeral)
@@ -170,8 +171,7 @@ class EncryptionProtocol:
         # msg_empty = AEAD(key3, 0, empty_cipher, hash) — decryption
         # hash = Hash(hash || msg_empty) 
         chain_key = self.KDF1(chain_key, E_R_pub)
-        msg_ephemeral = E_R_pub
-        hash = self.MixHash(hash, msg_ephemeral)
+        hash = self.MixHash(hash, E_R_pub)
         chain_key = self.KDF1(chain_key, self.DH(E_I_priv, E_R_pub))
         chain_key = self.KDF1(chain_key, self.DH(bytes(private_key), E_R_pub))
         (chain_key, tmp, key3) = self.KDF3(chain_key, Q)
@@ -181,17 +181,12 @@ class EncryptionProtocol:
         assert msg_text == b''              #debugging
         hash = self.MixHash(hash, msg_text)
 
-        # Section 5.4.5 — Transport Data Key Derivation
-        (sending_key, receiving_key) = self.KDF2(chain_key, b'')
-        N_send = 0
-        N_recv = 0
-
-        return (hash, sending_key, receiving_key, N_send, N_recv, msg_text)
+        return (hash, chain_key)
 
 
     def encrypt_transport(self, plaintext):
+        '''Encrypting and constructing plain_text into packet'''
         # msg_packet = AEAD(sending_key, N_send, plaintext, empty_auth)
-        # Auth text is empty (b'') for transport messages
         if isinstance(plaintext, str):
             plaintext = plaintext.encode('utf-8')
         ciphertext = self.AEAD_encrpyt(self.sending_key, self.N_send, plaintext, b'')
@@ -207,8 +202,8 @@ class EncryptionProtocol:
         packet = msg_type + reserved + receiver_index + counter + ciphertext
         return packet
     
-    def decrypt_transport(self, packet):    #might need to get message type
-        #extracting components from packet to call AEAD decrypt
+    def decrypt_transport(self, packet):
+        '''Extracting and decrypting packet to get plain_text'''
         counter = int.from_bytes(packet[8:16], 'little')            #NOTE need to verify that slicing is correct
         cipher_text = packet[16:]
         auth_text = b''
@@ -223,7 +218,7 @@ class EncryptionProtocol:
         Construction = b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s'
         Identifier   = b'WireGuard v1 zx2c4 Jason@zx2c4.com'
 
-        (E_I_pub, self.E_I_priv, chain_key, msg_static, msg_timestamp, hash) = self.send_prep(Construction, Identifier)
+        (E_I_pub, self.E_I_priv, self.chain_key, msg_static, msg_timestamp, self.hash) = self.send_prep(Construction, Identifier)
 
         #Parameter preperation
         self.client_sender_index = random.randint(0, 2**32 -1)#session ID
@@ -238,9 +233,9 @@ class EncryptionProtocol:
         msg+= mac1                                      #mac1 (16 bytes)
         msg+= b'\x00'*16                                #mac2 (16 bytes)
 
-        return  msg, chain_key, hash
+        return msg
     
-    def parse_response(self, response, chain_key, hash):
+    def parse_response(self, response):
         '''Manager method to take response and extract components for recieve_prep and decrypt_transport'''
         # Wireguard response layout:
         # [0]     type      (1 byte,  should be 0x02)
@@ -252,18 +247,42 @@ class EncryptionProtocol:
         # [60:76] mac1      (16 bytes)
         # [76:92] mac2      (16 bytes)
 
-        self.server_index = int.from_bytes(response[4:8], 'little')
+        self.server_index = int.from_bytes(response[4:8], 'little')                 #sender (4 bytes)
         assert self.client_sender_index == int.from_bytes(response[8:12], 'little')
-        E_R_pub = response[12:44]
-        msg_empty_cipher = response[44:60]
+        E_R_pub = response[12:44]                                                   #ephemeral (32 bytes)
+        empty = response[44:60]                                          #empty (16 bytes)
         Q = b'\x00'*32
 
-        (hash, self.sending_key, self.receiving_key, self.N_send, self.N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, bytes(self.E_I_priv), bytes(self.client_private_key), msg_empty_cipher, Q)
+        (hash, chain_key) = self.recieve_prep(self.chain_key, self.hash, E_R_pub, bytes(self.E_I_priv), bytes(self.client_private_key), empty, Q)
+        #Transport Data Key Derivation
+        (self.sending_key, self.receiving_key) = self.KDF2(chain_key, b'')
+        self.N_send = 0
+        self.N_recv = 0
         return
+
+    def main(self):
+        ''' NOTE in order to send a message with a payload you have to do the following steps:
+            Background: Message for wireguard must be in
+            ┌───────────────────────┐
+            │ IP Header             │
+            ├───────────────────────┤
+            │ UDP Header            │
+            ├───────────────────────┤
+            │ Wireguard transport   │
+            ├───────────────────────┤
+            │ Chat protocol message │
+            └───────────────────────┘'''
+        if self.DEBUG:
+            print("===Testing===")
+            self.testing()
+            print("===Completed Testing===")
+
+        print("Main")
+
+
 
     def testing(self):
         #testing phase
-        print("test")
         (self.client_private_key, self.client_public_key)=self.DH_Generate()
         print(self.client_private_key) 
         print(self.client_public_key)
@@ -332,16 +351,16 @@ class EncryptionProtocol:
         Constructor = b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s'
         Identifier = b'WireGuard v1 zx2c4 Jason@zx2c4.com'
 
-        type = b'\x01'
-        reserved = b'\x00'*3
-        sender = 4001697114 # Random number, fixed for this worked example
+        #type = b'\x01'
+        #reserved = b'\x00'*3
+        #sender = 4001697114 # Random number, fixed for this worked example
 
         cl_priv_key_obj = nacl.public.PrivateKey(self.t_client_private_key)
         self.client_public_key = bytes(cl_priv_key_obj.public_key)
         (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash) = self.send_prep(Constructor, Identifier)
-        ephemeral = E_I_pub
-        static = msg_static
-        timestamp = msg_timestamp
+        #ephemeral = E_I_pub
+        #static = msg_static
+        #timestamp = msg_timestamp
         msg = b"\x01\x00\x00\x00Z\r\x85\xee\xb1\x13\xb4\xd3\x00R'\x8b\x80\xd1\xcc\xc8X\x1bYf(4\xce&\xd0V\xde\x97\xff\xba2$u\x9b\xe3G\xc7\x12ry\x04\xb9\xc3\xaf\x9a\xf4\x7f \xf1\x98\xf3rA\x9d\x92\x0f\xaea[=\xf5N\xe0]Q\x9a\x88\x855\xb046\xb5\xefk\xf4z\xcd#\x0c\x0c\xcd<\xda\xc6?XF\x845JvXfm\xf9\xfa0\xf4\xb2\x18\xd6\xf9\x046\x17z\x08\x16y\xa9\xa5"
 
         out = b'r\xdb\rg\x14\xa2\xff\x13h\xf8K\x9dL\xec\x81\xbf\xa6Q\x15\xf3\xeb\xd7{\x87\xa5\x8bs\xc8\xb4k\x8e\x1e'
@@ -360,63 +379,28 @@ class EncryptionProtocol:
         mac1 = self.Mac(self.Hash(b"mac1----" + self.t_server_public_key), msg)
         mac2 = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
-
          #===Recieve prep testing===
         chain_key = b'\xe0\\UH\\\x12\x9a\xb4\xcc\xd0\r\xa9\xd2\xac\xc7\xb1]ky\xdc\xc2\x18\xb8\x95]NQ\xf9=\xcd\xa5\xc3'
         hash      = b'r\xdb\rg\x14\xa2\xff\x13h\xf8K\x9dL\xec\x81\xbf\xa6Q\x15\xf3\xeb\xd7{\x87\xa5\x8bs\xc8\xb4k\x8e\x1e'
-
         # Generated server response packet
         response_msg = b'\x02\x00\x00\x00D\xe6+\xe3Z\r\x85\xee\xe5\xd0!\x98z\x12\xb5\xf8&\x17\xfe\x14K\x9exe(\x1bK\xc2\x8e\x15T\x81\xcc\xbe\xceq$\x82v\x7f\x0b\xa1\xfc>\xdf\xb4\xe0\x96Pc\x15\xfe\x9b7\xdc\xb1\x18l\xa4sk\xfd"r\xa5z\x03\x1eu\xdd=\xd9\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-        # Use the hex output from the generator above
-        #response_msg = bytes.fromhex("0200000044e62be35a0d85eee5d021987a12b5f82617fe144b9e7865281b4bc28e155481ccbece712482767f43409ec8e0d79a9d719da92ffb16dfd207b5732006881efe0a")
         # Parse fields
         E_R_pub          = response_msg[12:44]
         msg_empty_cipher = response_msg[44:60]  # 16-byte auth tag
 
         E_I_priv = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
         Q = b'\x00' * 32  # No pre-shared key, set to 0^32 per Wireguard paper
-
-
-        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, bytes(self.t_client_private_key), msg_empty_cipher, Q)
-
+        (hash, chain_key) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, bytes(self.t_client_private_key), msg_empty_cipher, Q)
+        #Transport Data Key Derivation
+        (sending_key, receiving_key) = self.KDF2(chain_key, b'')
+        N_send = 0
+        N_recv = 0
         # Verify
         assert sending_key   == b'\xd0\x98\xff\xa8\xf4u&\xc4$\x94\xcd&*X\xbfc\x91_\xc3ls\xd1\x1f\xff=\xd4<\x92\xc6\xb5\xb0q'
         assert receiving_key == b'\x032\xb2\xbe\xae"<\'}\x97\x08@w\x98\x10l\xb9\xd4|\xc7\x02\xc4\xefE\x18K\x05\x92\xe0d\x8e\xce'
         print(True)
         print(hash)
-        print(msg_text)
         print("===Receive Complete===")
-
-
-    def main(self):
-        if self.DEBUG:
-            print("Testing")
-            self.testing()
-
-        print("Main")
-
-        ''' NOTE in order to send a message with a payload you have to do the following steps:
-            Background: Message for wireguard must be in
-            ┌───────────────────────┐
-            │ IP Header             │
-            ├───────────────────────┤
-            │ UDP Header            │
-            ├───────────────────────┤
-            │ Wireguard transport   │
-            ├───────────────────────┤
-            │ Chat protocol message │
-            └───────────────────────┘
-            
-            Step 1: Parse Chat protocol message into this class
-            ___Sending___
-            Step 2: call send_prep, then encrypt transport
-            
-            ___Recieving___
-            Step 3: call receive_prep, then decrypt'''
-        
-
-
-
 
 
 if __name__ == "__main__":
