@@ -6,6 +6,7 @@ import time
 from Crypto.Hash import BLAKE2s
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import hashlib
+import random
 
 class EncryptionProtocol:
     SERVER_STATIC_PUBLIC_KEY=b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
@@ -18,7 +19,9 @@ class EncryptionProtocol:
     receiving_key = None
     N_send        = 0
     N_recv        = 0
-    sender_index  = None
+    server_index  = None        #The servers index
+    client_sender_index = None
+
 
     #Worked example testing keys:
     t_client_private_key = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
@@ -138,7 +141,7 @@ class EncryptionProtocol:
         hash = self.MixHash(hash, bytes(E_I_pub))
 
         (chain_key, key1) = self.KDF2(chain_key, self.DH(bytes(E_I_priv), self.SERVER_STATIC_PUBLIC_KEY)) #linking chain key with ephemeral + server key
-        msg_static = self.AEAD_encrpyt(key1, 0, self.public_key, hash)  #encrypt
+        msg_static = self.AEAD_encrpyt(key1, 0, self.client_public_key, hash)  #encrypt
         hash = self.MixHash(hash, msg_static)
 
         #Debugging
@@ -156,7 +159,7 @@ class EncryptionProtocol:
         return (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash)
     
     # You need E_I_priv and S_I_priv passed in
-    def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, msg_cipher, Q):
+    def recieve_prep(self, chain_key, hash, E_R_pub, E_I_priv, private_key, msg_cipher, Q):
         # chain_key = Kdf1(chain_key, E_R_pub)
         # msg_ephemeral = E_R_pub
         # hash = Hash(hash || msg_ephemeral)
@@ -170,7 +173,7 @@ class EncryptionProtocol:
         msg_ephemeral = E_R_pub
         hash = self.MixHash(hash, msg_ephemeral)
         chain_key = self.KDF1(chain_key, self.DH(E_I_priv, E_R_pub))
-        chain_key = self.KDF1(chain_key, self.DH(bytes(self.client_private_key), E_R_pub))
+        chain_key = self.KDF1(chain_key, self.DH(bytes(private_key), E_R_pub))
         (chain_key, tmp, key3) = self.KDF3(chain_key, Q)
         hash = self.MixHash(hash, tmp)
 
@@ -186,7 +189,7 @@ class EncryptionProtocol:
         return (hash, sending_key, receiving_key, N_send, N_recv, msg_text)
 
 
-    def encrypt_transport(self, plaintext, msg_type):
+    def encrypt_transport(self, plaintext):
         # msg_packet = AEAD(sending_key, N_send, plaintext, empty_auth)
         # Auth text is empty (b'') for transport messages
         if isinstance(plaintext, str):
@@ -194,9 +197,9 @@ class EncryptionProtocol:
         ciphertext = self.AEAD_encrpyt(self.sending_key, self.N_send, plaintext, b'')
     
         # Assemble transport packet
-        #msg_type       = b'\x04'        #Need to change message type
+        msg_type       = b'\x04'        #Standard value for Wireguard transport message type according to paper
         reserved       = b'\x00' * 3
-        receiver_index = self.server_index.to_bytes(4, 'little')
+        receiver_index = self.server_index.to_bytes(4, 'little')        #TODO server_index
         counter        = self.N_send.to_bytes(8, 'little')
     
         self.N_send += 1  # increment counter after each message
@@ -214,6 +217,49 @@ class EncryptionProtocol:
         self.N_recv += 1
 
         return plain_text
+    
+    def build_send_packet(self):
+        '''Construct message packet with send_prep in correct format'''
+        Construction = b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s'
+        Identifier   = b'WireGuard v1 zx2c4 Jason@zx2c4.com'
+
+        (E_I_pub, self.E_I_priv, chain_key, msg_static, msg_timestamp, hash) = self.send_prep(Construction, Identifier)
+
+        #Parameter preperation
+        self.client_sender_index = random.randint(0, 2**32 -1)#session ID
+
+        msg = b'\x01'                                   #type (1 byte)
+        msg+= b'\x00'*3                                 #reserved (3 bytes)
+        msg+= self.client_sender_index.to_bytes(4, 'little') #sender (4 bytes)
+        msg+= E_I_pub                                   #ephemeral (32 bytes)
+        msg+= msg_static                                #static (̂32 bytes)
+        msg+= msg_timestamp                             #timestamp (̂12 bytes)
+        mac1 = self.Mac(self.Hash(b"mac1----" + self.SERVER_STATIC_PUBLIC_KEY), msg)
+        msg+= mac1                                      #mac1 (16 bytes)
+        msg+= b'\x00'*16                                #mac2 (16 bytes)
+
+        return  msg, chain_key, hash
+    
+    def parse_response(self, response, chain_key, hash):
+        '''Manager method to take response and extract components for recieve_prep and decrypt_transport'''
+        # Wireguard response layout:
+        # [0]     type      (1 byte,  should be 0x02)
+        # [1:4]   reserved  (3 bytes)
+        # [4:8]   sender    (4 bytes)
+        # [8:12]  receiver  (4 bytes)
+        # [12:44] ephemeral (32 bytes)
+        # [44:60] empty     (16 bytes, encrypted empty + auth tag)
+        # [60:76] mac1      (16 bytes)
+        # [76:92] mac2      (16 bytes)
+
+        self.server_index = int.from_bytes(response[4:8], 'little')
+        assert self.client_sender_index == int.from_bytes(response[8:12], 'little')
+        E_R_pub = response[12:44]
+        msg_empty_cipher = response[44:60]
+        Q = b'\x00'*32
+
+        (hash, self.sending_key, self.receiving_key, self.N_send, self.N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, bytes(self.E_I_priv), bytes(self.client_private_key), msg_empty_cipher, Q)
+        return
 
     def testing(self):
         #testing phase
@@ -291,7 +337,7 @@ class EncryptionProtocol:
         sender = 4001697114 # Random number, fixed for this worked example
 
         cl_priv_key_obj = nacl.public.PrivateKey(self.t_client_private_key)
-        self.public_key = bytes(cl_priv_key_obj.public_key)
+        self.client_public_key = bytes(cl_priv_key_obj.public_key)
         (E_I_pub, E_I_priv, chain_key, msg_static, msg_timestamp, hash) = self.send_prep(Constructor, Identifier)
         ephemeral = E_I_pub
         static = msg_static
@@ -331,7 +377,7 @@ class EncryptionProtocol:
         Q = b'\x00' * 32  # No pre-shared key, set to 0^32 per Wireguard paper
 
 
-        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, msg_empty_cipher, Q)
+        (hash, sending_key, receiving_key, N_send, N_recv, msg_text) = self.recieve_prep(chain_key, hash, E_R_pub, E_I_priv, bytes(self.t_client_private_key), msg_empty_cipher, Q)
 
         # Verify
         assert sending_key   == b'\xd0\x98\xff\xa8\xf4u&\xc4$\x94\xcd&*X\xbfc\x91_\xc3ls\xd1\x1f\xff=\xd4<\x92\xc6\xb5\xb0q'
