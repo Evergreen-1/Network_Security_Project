@@ -166,7 +166,8 @@ class EncryptionProtocol:
         hash = self.MixHash(hash, tmp)
 
         msg_text = self.AEAD_decrypt(key3, 0, msg_cipher, hash)
-        assert msg_text == b''              #debugging
+        if msg_text != b'': #Debugging
+            raise ValueError("Handshake decryption failed: empty payload expected")
         hash = self.MixHash(hash, msg_text)
 
         return (hash, chain_key)
@@ -211,7 +212,7 @@ class EncryptionProtocol:
         msg = b'\x01'                                   #type (1 byte)
         msg+= b'\x00'*3                                 #reserved (3 bytes)
         msg+= self.client_sender_index.to_bytes(4, 'little') #sender (4 bytes)
-        msg+= E_I_pub                                   #ephemeral (32 bytes)
+        msg+= bytes(E_I_pub)                                   #ephemeral (32 bytes)
         msg+= msg_static                                #static (̂32 bytes)
         msg+= msg_timestamp                             #timestamp (̂12 bytes)
         mac1 = self.Mac(self.Hash(b"mac1----" + self.SERVER_STATIC_PUBLIC_KEY), msg)
