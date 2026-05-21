@@ -22,9 +22,10 @@ class EncryptionProtocol:
     server_index  = None        #The servers index
     client_sender_index = None  #basically sessionID
     hash = None
-    chain_key = None    
+    chain_key = None
+    extended_flag = False    
 
-    def __init__(self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None):
+    def __init__(self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None, extended_flag = False):
         if (client_private_key is None or SERVER_STATIC_PUBLIC_KEY is None):
                 raise ValueError("All keys must have values")
         else:
@@ -35,6 +36,16 @@ class EncryptionProtocol:
             self.SERVER_STATIC_PUBLIC_KEY = SERVER_STATIC_PUBLIC_KEY
             self.client_private_key = client_private_key
             self.client_public_key = bytes(client_private_key.public_key)
+
+            self.sending_key   = None
+            self.receiving_key = None
+            self.N_send        = 0
+            self.N_recv        = 0
+            self.server_index  = None        #The servers index
+            self.client_sender_index = None  #basically sessionID
+            self.hash = None
+            self.chain_key = None
+            self.extended_flag = extended_flag
     
     def DH(self, private_key, public_key): #working
         # The Private & Public key input parameters need to be parsed in bytes via bytes() function.

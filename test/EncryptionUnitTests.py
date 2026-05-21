@@ -3,6 +3,8 @@ import nacl.public
 import nacl.bindings
 import time
 from unittest.mock import patch
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
 from EncryptionProtocol import EncryptionProtocol
 
 
