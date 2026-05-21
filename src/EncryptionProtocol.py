@@ -282,7 +282,8 @@ class ExtendedEncryptionProtocol(EncryptionProtocol):
         nonce = response[8:24]
         encrypted_cookie = response[24:]
         key = self.Hash(b"cookie--" + self.SERVER_STATIC_PUBLIC_KEY)
-        self.cookie = self.AEAD_decrypt(key, nonce, encrypted_cookie, self.mac1)
+        chacha = ChaCha20Poly1305(key)
+        self.cookie = chacha.decrypt(nonce, encrypted_cookie, self.mac1)
         return self.cookie
     
 

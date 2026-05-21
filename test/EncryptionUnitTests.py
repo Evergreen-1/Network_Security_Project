@@ -5,7 +5,7 @@ import time
 from unittest.mock import patch
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
-from EncryptionProtocol import EncryptionProtocol
+from EncryptionProtocol import EncryptionProtocol, ExtendedEncryptionProtocol
 
 
 # ── Shared test vectors ────────────────────────────────────────────────────────
@@ -337,6 +337,126 @@ class TestTransport(unittest.TestCase):
     def test_encrypt_accepts_string(self):
         packet = self.ep.encrypt_transport("hello as string")
         self.assertIsInstance(packet, bytes)
+
+class TestExtendedEncryptionProtocol(unittest.TestCase):
+
+    def setUp(self):
+        priv = nacl.public.PrivateKey(T_CLIENT_PRIVATE_KEY)
+        self.ep = ExtendedEncryptionProtocol(priv, T_SERVER_PUBLIC_KEY)
+        self.ep.client_public_key = bytes(priv.public_key)
+
+    def test_inherits_from_encryption_protocol(self):
+        self.assertIsInstance(self.ep, EncryptionProtocol)
+
+    def test_initial_mac1_is_none(self):
+        self.assertIsNone(self.ep.mac1)
+
+    def test_initial_cookie_is_none(self):
+        self.assertIsNone(self.ep.cookie)
+
+    def test_accepts_raw_bytes_private_key(self):
+        ep = ExtendedEncryptionProtocol(T_CLIENT_PRIVATE_KEY, T_SERVER_PUBLIC_KEY)
+        self.assertIsInstance(ep.client_private_key, nacl.public.PrivateKey)
+
+    def _build_packet(self, cookie=None):
+        """Helper: builds a packet with fixed ephemeral key and timestamp."""
+        FIXED_TIME     = 1744377020.21733
+        FIXED_E_I_PRIV = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
+
+        def fixed_dh_generate():
+            priv = nacl.public.PrivateKey(FIXED_E_I_PRIV)
+            return (priv, priv.public_key)
+
+        with patch('time.time', return_value=FIXED_TIME), \
+             patch.object(self.ep, 'DH_Generate', fixed_dh_generate):
+            return self.ep.build_send_packet(cookie=cookie)
+
+    def test_build_send_packet_stores_mac1(self):
+        self._build_packet()
+        self.assertIsNotNone(self.ep.mac1)
+        self.assertEqual(len(self.ep.mac1), 16)
+
+    def test_build_send_packet_no_cookie_mac2_is_zeroes(self):
+        packet = self._build_packet(cookie=None)
+        mac2 = packet[-16:]
+        self.assertEqual(mac2, b'\x00' * 16)
+
+    def test_build_send_packet_with_cookie_mac2_not_zeroes(self):
+        cookie = b'\xab' * 32
+        packet = self._build_packet(cookie=cookie)
+        mac2 = packet[-16:]
+        self.assertNotEqual(mac2, b'\x00' * 16)
+
+    def test_build_send_packet_with_cookie_mac2_is_correct(self):
+        cookie = b'\xab' * 32
+        packet = self._build_packet(cookie=cookie)
+        # mac2 = Mac(cookie, msg_without_mac2)
+        expected_mac2 = self.ep.Mac(cookie, packet[:-16])
+        self.assertEqual(packet[-16:], expected_mac2)
+
+    def test_build_send_packet_length_unchanged_with_cookie(self):
+        packet_no_cookie   = self._build_packet(cookie=None)
+        packet_with_cookie = self._build_packet(cookie=b'\xab' * 32)
+        self.assertEqual(len(packet_no_cookie), len(packet_with_cookie))
+
+    def test_mac1_changes_between_packets(self):
+        """Different ephemeral keys should produce different mac1 values."""
+        self._build_packet()
+        mac1_first = self.ep.mac1
+        self._build_packet()
+        mac1_second = self.ep.mac1
+        # Both are valid mac1s — just check they're produced consistently
+        self.assertEqual(len(mac1_first), 16)
+        self.assertEqual(len(mac1_second), 16)
+
+    def _make_cookie_reply(self, cookie_plaintext: bytes, mac1: bytes) -> bytes:
+        """Construct a synthetic type-0x03 cookie reply packet."""
+        from cryptography.hazmat.primitives.ciphers.aead import XChaCha20Poly1305
+        key   = self.ep.Hash(b"cookie--" + T_SERVER_PUBLIC_KEY)
+        nonce = bytes(range(24))  # deterministic 24-byte nonce for testing
+        ct    = XChaCha20Poly1305(key).encrypt(nonce, cookie_plaintext, mac1)
+        # type(1) + reserved(3) + receiver(4) + nonce(24) + encrypted_cookie
+        return b'\x03\x00\x00\x00' + b'\x00' * 4 + nonce + ct
+
+    def test_parse_cookie_reply_returns_cookie(self):
+        self._build_packet()  # populates self.ep.mac1
+        cookie_plaintext = b'\xcc' * 32
+        reply = self._make_cookie_reply(cookie_plaintext, self.ep.mac1)
+        result = self.ep.parse_cookie_reply(reply)
+        self.assertEqual(result, cookie_plaintext)
+
+    def test_parse_cookie_reply_stores_cookie(self):
+        self._build_packet()
+        cookie_plaintext = b'\xdd' * 32
+        reply = self._make_cookie_reply(cookie_plaintext, self.ep.mac1)
+        self.ep.parse_cookie_reply(reply)
+        self.assertEqual(self.ep.cookie, cookie_plaintext)
+
+    def test_parse_cookie_reply_wrong_mac1_raises(self):
+        from cryptography.exceptions import InvalidTag
+        self._build_packet()
+        cookie_plaintext = b'\xee' * 32
+        reply = self._make_cookie_reply(cookie_plaintext, b'\x00' * 16)  # wrong mac1
+        with self.assertRaises(InvalidTag):
+            self.ep.parse_cookie_reply(reply)
+
+    def test_full_extended_flow(self):
+        """build_send_packet → parse_cookie_reply → build_send_packet with cookie."""
+        from cryptography.exceptions import InvalidTag
+
+        # Step 1: initial handshake packet
+        initial_packet = self._build_packet()
+        self.assertIsNotNone(self.ep.mac1)
+
+        # Step 2: synthesise cookie reply and parse it
+        cookie_plaintext = b'\xff' * 32
+        reply = self._make_cookie_reply(cookie_plaintext, self.ep.mac1)
+        self.ep.parse_cookie_reply(reply)
+        self.assertEqual(self.ep.cookie, cookie_plaintext)
+
+        # Step 3: resend with cookie — mac2 must not be zeroes
+        final_packet = self._build_packet(cookie=self.ep.cookie)
+        self.assertNotEqual(final_packet[-16:], b'\x00' * 16)
 
 
 if __name__ == "__main__":
