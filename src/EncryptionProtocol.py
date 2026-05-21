@@ -1,5 +1,4 @@
 #Encryption Protocol
-#should I have a setup method?
 import nacl.bindings
 import nacl.public
 import time
@@ -22,10 +21,9 @@ class EncryptionProtocol:
     server_index  = None        #The servers index
     client_sender_index = None  #basically sessionID
     hash = None
-    chain_key = None
-    extended_flag = False    
+    chain_key = None  
 
-    def __init__(self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None, extended_flag = False):
+    def __init__(self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None):
         if (client_private_key is None or SERVER_STATIC_PUBLIC_KEY is None):
                 raise ValueError("All keys must have values")
         else:
@@ -45,7 +43,6 @@ class EncryptionProtocol:
             self.client_sender_index = None  #basically sessionID
             self.hash = None
             self.chain_key = None
-            self.extended_flag = extended_flag
     
     def DH(self, private_key, public_key): #working
         # The Private & Public key input parameters need to be parsed in bytes via bytes() function.
@@ -257,10 +254,43 @@ class EncryptionProtocol:
         self.N_recv = 0
         return
 
+'''NetSec Wireguard Project
+   
+   class ExtendedEncryptionProtocol
+   description:
+        This class extends the Encryption protocol to adopt the mac2 calculations and the cookie handling.'''
+class ExtendedEncryptionProtocol(EncryptionProtocol):
+
+    def __init__ (self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None):
+        super().__init__(client_private_key, SERVER_STATIC_PUBLIC_KEY)
+        self.mac1 = None
+        self.cookie = None
+
+    def build_send_packet(self, cookie=None):
+        msg = super().build_send_packet()
+        self.mac1 = msg[-32:-16]    #retriving the mac1 from msg before calculating mac2
+
+        if cookie is not None:
+            mac2 = self.Mac(cookie, msg[:-16])
+            msg = msg[:-16] + mac2
+
+        return msg
+
+    def parse_cookie_reply(self, response):
+        # type 0x03: [0] type, [1:4] reserved, [4:8] receiver,
+        # [8:24] nonce, [24:56] encrypted_cookie
+        nonce = response[8:24]
+        encrypted_cookie = response[24:]
+        key = self.Hash(b"cookie--" + self.SERVER_STATIC_PUBLIC_KEY)
+        self.cookie = self.AEAD_decrypt(key, nonce, encrypted_cookie, self.mac1)
+        return self.cookie
+    
+
 if __name__ == "__main__":
     '''TODO Here is some basic input example that needs to me removed for final'''
     server_key = base64.b64decode(b'ZixewENi85M3vxEUIu0TC5/nrzuUsHAT4ZTdhc8BC0M=')
     client_private_key = input("Enter your private key (base64):\n")        #NOTE fill this in if you must
     priv_key = base64.b64decode(client_private_key)
     obj = EncryptionProtocol(priv_key, server_key)
-    
+    ext_obj = ExtendedEncryptionProtocol(priv_key, server_key)
+        
