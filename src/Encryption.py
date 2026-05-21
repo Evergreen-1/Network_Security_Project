@@ -7,7 +7,7 @@ import hashlib
 import random
 import base64
 
-class EncryptionProtocol:
+class Encryption:
     #Class input varaibles
     SERVER_STATIC_PUBLIC_KEY= None  #Required as input
     client_private_key = None       #NOTE Need to get from website
@@ -259,7 +259,7 @@ class EncryptionProtocol:
    class ExtendedEncryptionProtocol
    description:
         This class extends the Encryption protocol to adopt the mac2 calculations and the cookie handling.'''
-class ExtendedEncryptionProtocol(EncryptionProtocol):
+class ExtendedEncryption(Encryption):
 
     def __init__ (self, client_private_key=None, SERVER_STATIC_PUBLIC_KEY=None):
         super().__init__(client_private_key, SERVER_STATIC_PUBLIC_KEY)

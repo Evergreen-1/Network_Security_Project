@@ -1,7 +1,7 @@
 # JFFSYE002
 # LCKJOS003
 
-import EncryptionProtocol
+import Encryption
 import ChatProtocol
 import ChatUI
 

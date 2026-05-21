@@ -4,8 +4,9 @@ import nacl.bindings
 import time
 from unittest.mock import patch
 import sys, os
+print(sys.executable)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
-from EncryptionProtocol import EncryptionProtocol, ExtendedEncryptionProtocol
+from Encryption import Encryption, ExtendedEncryption
 
 
 # ── Shared test vectors ────────────────────────────────────────────────────────
@@ -16,10 +17,10 @@ T_KEY    = b':\xb6\x90\xbd\n:\x18Z88"\xd8a\x08\x9f\xa7\x9c\xc7\xcb\x01\x99-\xfd\
 T_INPUT  = b'I love network security'
 
 
-def make_protocol() -> EncryptionProtocol:
-    """Return a non-debug EncryptionProtocol using the worked-example keys."""
+def make_protocol() -> Encryption:
+    """Return a non-debug Encryption using the worked-example keys."""
     priv = nacl.public.PrivateKey(T_CLIENT_PRIVATE_KEY)
-    ep = EncryptionProtocol(priv, T_SERVER_PUBLIC_KEY)
+    ep = Encryption(priv, T_SERVER_PUBLIC_KEY)
     # Manually set the public key to match the worked example
     ep.client_public_key = bytes(priv.public_key)
     return ep
@@ -30,17 +31,17 @@ def make_protocol() -> EncryptionProtocol:
 class TestConstructor(unittest.TestCase):
 
     def test_accepts_raw_bytes_private_key(self):
-        ep = EncryptionProtocol(T_CLIENT_PRIVATE_KEY, T_SERVER_PUBLIC_KEY)
+        ep = Encryption(T_CLIENT_PRIVATE_KEY, T_SERVER_PUBLIC_KEY)
         self.assertIsInstance(ep.client_private_key, nacl.public.PrivateKey)
 
     def test_accepts_private_key_object(self):
         priv = nacl.public.PrivateKey(T_CLIENT_PRIVATE_KEY)
-        ep = EncryptionProtocol(priv, T_SERVER_PUBLIC_KEY)
+        ep = Encryption(priv, T_SERVER_PUBLIC_KEY)
         self.assertIsInstance(ep.client_private_key, nacl.public.PrivateKey)
 
     def test_raises_on_invalid_key_type(self):
         with self.assertRaises(TypeError):
-            EncryptionProtocol("not_a_key", T_SERVER_PUBLIC_KEY)
+            Encryption("not_a_key", T_SERVER_PUBLIC_KEY)
 
     def test_private_key_not_stored_as_bytes(self):
         ep = make_protocol()
@@ -338,15 +339,15 @@ class TestTransport(unittest.TestCase):
         packet = self.ep.encrypt_transport("hello as string")
         self.assertIsInstance(packet, bytes)
 
-class TestExtendedEncryptionProtocol(unittest.TestCase):
+class TestExtendedEncryption(unittest.TestCase):
 
     def setUp(self):
         priv = nacl.public.PrivateKey(T_CLIENT_PRIVATE_KEY)
-        self.ep = ExtendedEncryptionProtocol(priv, T_SERVER_PUBLIC_KEY)
+        self.ep = ExtendedEncryption(priv, T_SERVER_PUBLIC_KEY)
         self.ep.client_public_key = bytes(priv.public_key)
 
     def test_inherits_from_encryption_protocol(self):
-        self.assertIsInstance(self.ep, EncryptionProtocol)
+        self.assertIsInstance(self.ep, Encryption)
 
     def test_initial_mac1_is_none(self):
         self.assertIsNone(self.ep.mac1)
@@ -355,7 +356,7 @@ class TestExtendedEncryptionProtocol(unittest.TestCase):
         self.assertIsNone(self.ep.cookie)
 
     def test_accepts_raw_bytes_private_key(self):
-        ep = ExtendedEncryptionProtocol(T_CLIENT_PRIVATE_KEY, T_SERVER_PUBLIC_KEY)
+        ep = ExtendedEncryption(T_CLIENT_PRIVATE_KEY, T_SERVER_PUBLIC_KEY)
         self.assertIsInstance(ep.client_private_key, nacl.public.PrivateKey)
 
     def _build_packet(self, cookie=None):
