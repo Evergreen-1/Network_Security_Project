@@ -42,8 +42,7 @@ class ChatClient:
         if self.event_task and not self.event_task.done():
             self.event_task.cancel()
         if not self.ping_task and not self.event_task and not self.session:
-            print("already disconnected")
-            return
+            return "already disconnected"
 
         try:
             response = await asyncio.shield(self.chat_protocol.send({"request_type": 2}))
