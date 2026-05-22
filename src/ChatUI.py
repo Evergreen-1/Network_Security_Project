@@ -426,14 +426,26 @@ class ChannelDetailsFrame(customtkinter.CTkFrame):
         self.channelDetails.insert("0.0", ("channel Details here!!!"))
         self.channelDetails.place(relx=0.5, rely=0.35, relwidth=0.7, relheight=0.67, anchor="center")
 
-        self.btnJoinChannel = customtkinter.CTkButton(self, text="Join Channel", command=lambda: self.JoinChannel())
-        self.btnJoinChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
+	self.Joined = False
+
+	# TODO check if we're in the channel already
+
+	if self.Joined:
+	    self.btnJoinChannel = customtkinter.CTkButton(self, text="Join Channel", command=lambda: self.JoinChannel())
+            self.btnJoinChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
+        else:
+            self.btnLeaveChannel = customtkinter.CTkButton(self, text="Leave Channel", command=lambda: self.LeaveChannel())
+            self.btnLeaveChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
         
         self.btnCancel = customtkinter.CTkButton(self, text="Cancel", command=lambda: controller.changeFrame("ChattingFrame"))
         self.btnCancel.place(relx=0.745, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
 
     def JoinChannel(self):
         print("Joining Channel!!")
+        self.controller.changeFrame("ChattingFrame")
+    
+    def LeaveChannel(self):
+        print("Leaving Channel!!")
         self.controller.changeFrame("ChattingFrame")
 
 class NewChannelFrame(customtkinter.CTkFrame):
@@ -442,12 +454,19 @@ class NewChannelFrame(customtkinter.CTkFrame):
 
         self.controller = controller
 
-        self.channelDetails = customtkinter.CTkTextbox(master=self)
-        self.channelDetails.insert("0.0", ("channel Details here!!!"))
-        self.channelDetails.place(relx=0.5, rely=0.35, relwidth=0.7, relheight=0.67, anchor="center")
+        self.entryChannelName = customtkinter.CTkEntry(master=self, placeholder_text="Enter new channel name here.")
+        self.entryChannelName.place(relx=0.5, rely=0.125, relwidth=0.7, relheight=0.2, anchor="center")
 
-        self.btnJoinChannel = customtkinter.CTkButton(self, text="Create Channel", command=lambda: self.CreateChannel())
-        self.btnJoinChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
+        self.channelNameToolTip = CTkToolTip(self.entryChannelName, message="Channel name can only contain letters, numbers, underscores and dashes and is limited to 20 chars.\nEach user can create atmost 20 channels at a time.\n Any excess will be trimmed.")
+        
+        self.entryChannelDesc = customtkinter.CTkTextbox(master=self)
+        self.entryChannelDesc.insert("0.0", "Enter new channel decription here.")
+        self.entryChannelDesc.place(relx=0.5, rely=0.45, relwidth=0.7, relheight=0.4, anchor="center")
+
+        self.channelNameToolTip = CTkToolTip(self.entryChannelDesc, message="Channel description is limited to 100 chars.\n Any excess will be trimmed.")
+
+        self.btnCreateChannel = customtkinter.CTkButton(self, text="Create Channel", command=lambda: self.CreateChannel())
+        self.btnCreateChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
         
         self.btnCancel = customtkinter.CTkButton(self, text="Cancel", command=lambda: controller.changeFrame("ChattingFrame"))
         self.btnCancel.place(relx=0.745, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
