@@ -276,14 +276,13 @@ class ExtendedEncryption(Encryption):
 
         return msg
 
-    def parse_cookie_reply(self, response):
+    def parse_cookie_reply(self, response):                     #Might have to recheck slicing/format with paper since it seems different
         # type 0x03: [0] type, [1:4] reserved, [4:8] receiver,
-        # [8:24] nonce, [24:56] encrypted_cookie
-        nonce = response[8:24]
-        encrypted_cookie = response[24:]
+        # [8:32] nonce, [32:] encrypted_cookie
+        nonce = response[8:32]
+        encrypted_cookie = response[32:]
         key = self.Hash(b"cookie--" + self.SERVER_STATIC_PUBLIC_KEY)
-        chacha = ChaCha20Poly1305(key)
-        self.cookie = chacha.decrypt(nonce, encrypted_cookie, self.mac1)
+        self.cookie = nacl.bindings.crypto_aead_xchacha20poly1305_ietf_decrypt(encrypted_cookie, self.mac1, nonce, key)
         return self.cookie
     
 

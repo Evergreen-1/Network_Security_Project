@@ -4,6 +4,8 @@ import BaseProtocol
 import src.Encryption
 
 class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
+
+    MAX_ATTEMPTS = 6
     
     def __init__(self, encryption : src.Encryption.Encryption):
         self.hostname = "csc4026z.link"
@@ -43,8 +45,16 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
             plain_text = self.encryption.decrypt_transport(data)
             self.on_response(plain_text)
 
-    async def _do_handshake(self):
+    async def _do_handshake(self):  #maybe add a timeout?
         packet = self.encryption.build_send_packet()
-        self.transport.sendto(packet)
 
-        await self.handshake_done
+        for attempt in range(self.MAX_ATTEMPTS):
+            try: 
+                self.transport.sendto(packet)
+                await asyncio.wait_for(self.handshake_done, timeout=5.0)
+                return
+            except asyncio.TimeoutError:
+                print("Attempt "+ attempt + " failed due to timeout")
+                if (attempt == self.MAX_ATTEMPTS-1):    #last interation
+                    raise TimeoutError(f"{packet} timed out")
+                self.handshake_done = asyncio.get_running_loop().create_future()    #reset for next iteration

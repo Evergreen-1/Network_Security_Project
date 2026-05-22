@@ -17,10 +17,10 @@ class ExtendedEncryptionProtocol(EncryptedProtocol):
 
     async def _do_handshake(self):
         loop = asyncio.get_running_loop()
-        self.cookie = None
+        cookie = None
 
         while True:
-            packet = self.encryption.build_send_packet(self.cookie)
+            packet = self.encryption.build_send_packet(cookie)
             self.transport.sendto(packet)
 
             self.handshake_packet = loop.create_future()
@@ -28,11 +28,11 @@ class ExtendedEncryptionProtocol(EncryptedProtocol):
             data = await self.handshake_packet
 
             if data[0] == 0x02:
-                self.cookie = self.encryption.parse_response(data)
+                self.encryption.parse_response(data)
                 self.handshake_packet = None
                 break
             elif data[0] == 0x03:
-                self.cookie = self.encryption.parse_cookie_reply(data)
+                cookie = self.encryption.parse_cookie_reply(data)
 
     def datagram_received(self, data: bytes, addr: tuple):
         if self.handshake_packet and not self.handshake_packet.done():  #Checking to see if handshake is still in progress

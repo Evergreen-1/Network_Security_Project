@@ -2,6 +2,7 @@ import unittest
 import nacl.public
 import nacl.bindings
 import time
+from nacl.exceptions import CryptoError
 from unittest.mock import patch
 import sys, os
 print(sys.executable)
@@ -412,10 +413,9 @@ class TestExtendedEncryption(unittest.TestCase):
 
     def _make_cookie_reply(self, cookie_plaintext: bytes, mac1: bytes) -> bytes:
         """Construct a synthetic type-0x03 cookie reply packet."""
-        from cryptography.hazmat.primitives.ciphers.aead import XChaCha20Poly1305
         key   = self.ep.Hash(b"cookie--" + T_SERVER_PUBLIC_KEY)
         nonce = bytes(range(24))  # deterministic 24-byte nonce for testing
-        ct    = XChaCha20Poly1305(key).encrypt(nonce, cookie_plaintext, mac1)
+        ct    = nacl.bindings.crypto_aead_xchacha20poly1305_ietf_encrypt(cookie_plaintext, mac1, nonce, key)
         # type(1) + reserved(3) + receiver(4) + nonce(24) + encrypted_cookie
         return b'\x03\x00\x00\x00' + b'\x00' * 4 + nonce + ct
 
@@ -438,7 +438,7 @@ class TestExtendedEncryption(unittest.TestCase):
         self._build_packet()
         cookie_plaintext = b'\xee' * 32
         reply = self._make_cookie_reply(cookie_plaintext, b'\x00' * 16)  # wrong mac1
-        with self.assertRaises(InvalidTag):
+        with self.assertRaises(CryptoError):
             self.ep.parse_cookie_reply(reply)
 
     def test_full_extended_flow(self):
