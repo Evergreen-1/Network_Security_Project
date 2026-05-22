@@ -1,1 +1,0 @@
-'''This is purely an empty file to make the src directory into a package for proper imports.'''
