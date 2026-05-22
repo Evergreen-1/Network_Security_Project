@@ -292,6 +292,6 @@ if __name__ == "__main__":
     server_key = base64.b64decode(b'ZixewENi85M3vxEUIu0TC5/nrzuUsHAT4ZTdhc8BC0M=')
     client_private_key = input("Enter your private key (base64):\n")        #NOTE fill this in if you must
     priv_key = base64.b64decode(client_private_key)
-    obj = EncryptionProtocol(priv_key, server_key)
-    ext_obj = ExtendedEncryptionProtocol(priv_key, server_key)
+    obj = Encryption(priv_key, server_key)
+    ext_obj = ExtendedEncryption(priv_key, server_key)
         
