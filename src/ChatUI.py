@@ -1,6 +1,6 @@
 # Main Menu
 import customtkinter
-from CTkToolTip import *	
+from CTkToolTip import *
 from PIL import Image
 
 RESOURCE_FOLDER = "res/"
