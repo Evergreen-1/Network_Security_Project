@@ -18,7 +18,7 @@ class ChatClient:
     async def connect(self):
         await self.chat_protocol.start()
         response = await self.chat_protocol.send({"request_type": 1})
-        
+
         self.session = response.get("session")
         self.chat_protocol.session = self.session
         self.username = response.get("username")
@@ -41,6 +41,8 @@ class ChatClient:
             self.ping_task.cancel()
         if self.event_task and not self.event_task.done():
             self.event_task.cancel()
+        if not self.ping_task and not self.event_task and not self.session:
+            return "already disconnected"
 
         try:
             response = await asyncio.shield(self.chat_protocol.send({"request_type": 2}))
@@ -51,7 +53,7 @@ class ChatClient:
             self.session = None
             self.chat_protocol.session = None
             self.username = None
-            self.channels.clear()
+            self.channels = set()
 
     async def create_channel(self, channel, description):
         pass
@@ -99,7 +101,7 @@ class ChatClient:
                     self.session = None
                     self.chat_protocol.session = self.session
                     self.username = None
-                    self.channels.clear()
+                    self.channels = set()
 
                 if self.on_event:
                     self.on_event(event)
