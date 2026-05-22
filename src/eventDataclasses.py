@@ -14,13 +14,13 @@ class ChannelMessageEvent:
     message: str
 
 @dataclass
-class UserJoinEvent:
+class ChannelJoinEvent:
     channel: str
     username: str
     description: str
 
 @dataclass
-class UserLeaveEvent:
+class ChannelLeaveEvent:
     channel: str
     username: str
 

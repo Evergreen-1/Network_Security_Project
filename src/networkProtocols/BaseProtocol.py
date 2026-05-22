@@ -5,13 +5,13 @@ from abc import ABC, abstractmethod
 class BaseProtocol:
 
     @abstractmethod
-    async def start(on_response):
+    async def start(self, on_response):
         pass
 
     @abstractmethod
-    def send(data: bytes):
+    def send(self, data: bytes):
         pass
 
     @abstractmethod
-    def close():
+    def close(self):
         pass
