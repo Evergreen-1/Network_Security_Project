@@ -1,13 +1,12 @@
 import asyncio
-import socket
 import BaseProtocol
-import src.Encryption
+import Encryption
 
 class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
     MAX_ATTEMPTS = 6
     
-    def __init__(self, encryption : src.Encryption.Encryption):
+    def __init__(self, encryption : Encryption):
         self.hostname = "csc4026z.link"
         self.port = 51820
         self.transport = None
@@ -30,7 +29,7 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
     def send(self, data: bytes):
         if self.transport:
             wireguard_wrap = self.encryption.encrypt_transport(data)
-            self.transport.sendto(wireguard_wrap)
+            self.transport.send(wireguard_wrap)
         else:
             raise RuntimeError("cant send; transport not initialised")
 
@@ -50,7 +49,7 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
         for attempt in range(self.MAX_ATTEMPTS):
             try: 
-                self.transport.sendto(packet)
+                self.transport.send(packet)
                 await asyncio.wait_for(self.handshake_done, timeout=5.0)
                 return
             except asyncio.TimeoutError:

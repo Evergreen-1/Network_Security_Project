@@ -5,11 +5,13 @@ import time
 from nacl.exceptions import CryptoError
 from unittest.mock import patch
 import sys, os
-print(sys.executable)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
-from Encryption import Encryption, ExtendedEncryption
-
-
+#print(sys.executable)
+#sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
+#from Encryption import Encryption, ExtendedEncryption
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+from src.networkProtocols.Encryption import Encryption, ExtendedEncryption
 # ── Shared test vectors ────────────────────────────────────────────────────────
 T_CLIENT_PRIVATE_KEY = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
 T_SERVER_PUBLIC_KEY  = b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
