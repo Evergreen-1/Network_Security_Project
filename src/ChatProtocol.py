@@ -13,6 +13,20 @@ from eventDataclasses import (
     ServerShutdownEvent
 )
 from networkProtocols import BaseProtocol
+from enum import IntEnum
+
+OpCode = IntEnum("OpCode", [
+    ("CONNECT", 1),
+    ("DISCONNECT", 2),
+    ("ERROR", 20),
+    ("USER_MESSAGE", 33),
+    ("CHANNEL_MESSAGE", 30),
+    ("CHANNEL_JOIN", 28),
+    ("CHANNEL_LEAVE", 29),
+    ("USERNAME_CHANGE", 34),
+    ("SERVER_MESSAGE", 36),
+    ("SERVER_SHUTDOWN", 37)
+])
 
 class ChatProtocol:
 
@@ -37,7 +51,7 @@ class ChatProtocol:
     async def send(self, outgoing_data: dict) -> dict:
         if self.session:
             outgoing_data["session"] = self.session
-        elif outgoing_data["request_type"] != 1:
+        elif outgoing_data["request_type"] not in (OpCode.CONNECT, OpCode.DISCONNECT):
             raise RuntimeError("not in a session")
         
         while True:
@@ -79,7 +93,7 @@ class ChatProtocol:
         if response_handle is not None and response_handle in self.pending: # reply
             target_future = self.pending[response_handle]
             if not target_future.done():
-                if response_type == 20 or "error" in response:
+                if response_type == OpCode.ERROR or "error" in response:
                     target_future.set_exception(RuntimeError(response.get("error")))
                 else:
                     target_future.set_result(response)
@@ -87,44 +101,44 @@ class ChatProtocol:
             try:
                 event = self.make_event(response_type, response)
                 if event:
-                    self.event_queue.put_nowait(event)
+                    self.event_queue.put_nowait(event) # could add try catch to prevent queue explosion
             except Exception as e:
                 print(f"issue with unsolicited response: {e}")
 
     def make_event(self, response_type, response: dict):
         match response_type:
-            case 33:    # User Message
+            case OpCode.USER_MESSAGE:    # User Message
                 return UserMessageEvent(
                     username=response["from_username"],
                     message=response["message"]
                 )
-            case 30:    # Channel Message
+            case OpCode.CHANNEL_MESSAGE:    # Channel Message
                 return ChannelMessageEvent(
                     channel=response["channel"],
                     username=response["username"],
                     message=response["message"]
                 )
-            case 28:    # Channel Join
+            case OpCode.CHANNEL_JOIN:    # Channel Join
                 return ChannelJoinEvent(
                     channel=response["channel"],
                     username=response["username"],
                     description=response["description"]
                 )
-            case 29:    # Channel Leave
+            case OpCode.CHANNEL_LEAVE:    # Channel Leave
                 return ChannelLeaveEvent(
                     channel=response["channel"],
                     username=response["username"]
                 )
-            case 34:    # Username Change
+            case OpCode.USERNAME_CHANGE:    # Username Change
                 return UsernameChangeEvent(
                     old_username=response["old_username"],
                     new_username=response["new_username"]
                 )
-            case 36:    # Server Message
+            case OpCode.SERVER_MESSAGE:    # Server Message
                 return ServerMessageEvent(
                     message=response["message"]
                 )
-            case 37:    # Server Shutdown
+            case OpCode.SERVER_SHUTDOWN:    # Server Shutdown
                 return ServerShutdownEvent(
                     message=response["message"]
                 )
