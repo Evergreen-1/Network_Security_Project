@@ -36,6 +36,10 @@ class ChatProtocol:
         self.pending = {}
         self.event_queue = asyncio.Queue()
 
+    @property
+    def is_cleartext(self) -> bool:
+        return getattr(self.transport_protocol, "is_cleartext", False)
+
     def pack(self, outgoing_data: dict) -> bytes:
         return msgpack.packb(outgoing_data)
     
@@ -94,7 +98,7 @@ class ChatProtocol:
             target_future = self.pending[response_handle]
             if not target_future.done():
                 if response_type == OpCode.ERROR or "error" in response:
-                    target_future.set_exception(RuntimeError(response.get("error")))
+                    target_future.set_exception(RuntimeError(response.get("error") or "error"))
                 else:
                     target_future.set_result(response)
         else:   # unsolicited response

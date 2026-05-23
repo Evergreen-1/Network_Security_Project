@@ -11,6 +11,7 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
         self.port = 51825
         self.transport = None
         self.on_response = None
+        self.is_cleartext = True
 
     async def start(self, on_response):
         self.on_response = on_response
