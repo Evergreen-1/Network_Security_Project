@@ -3,6 +3,7 @@
 from ChatProtocol import ChatProtocol
 from eventDataclasses import UsernameChangeEvent, ServerShutdownEvent
 import asyncio
+from OpCode import OpCode
 
 class ChatClient:
 
@@ -18,7 +19,7 @@ class ChatClient:
     async def connect(self):
         await self.chat_protocol.start()
         response = await self.chat_protocol.send({
-            "request_type": 1
+            "request_type": OpCode.CONNECT
             })
 
         self.session = response.get("session")
@@ -26,7 +27,7 @@ class ChatClient:
         self.username = response.get("username")
 
         self.ping_task = asyncio.create_task(self.ping())
-        self.event_task = asyncio.create_task(self.events())
+        self.event_task = asyncio.create_task(self.dispatch_events())
 
         return response.get("message")
 
@@ -35,7 +36,7 @@ class ChatClient:
             try:
                 await asyncio.sleep(30)
                 await self.chat_protocol.send({
-                    "request_type": 3
+                    "request_type": OpCode.PING
                     })
             except asyncio.CancelledError:
                 break
@@ -48,18 +49,29 @@ class ChatClient:
         if self.event_task and not self.event_task.done():
             self.event_task.cancel()
 
-        try:
-            response = await asyncio.shield(self.chat_protocol.send({
-                "request_type": 2
-                }))
-            return response.get("message") or "disconnected"
-        except Exception as e:
-            return "failed to deliver disconnect message: {e}"
-        finally:
-            self.session = None
-            self.chat_protocol.session = None
-            self.username = None
-            self.joined_channels = set()
+        response = await asyncio.shield(self.chat_protocol.send({
+            "request_type": OpCode.DISCONNECT
+            }))
+        self.session = None
+        self.chat_protocol.session = None
+        self.username = None
+        self.joined_channels = set()
+        self.chat_protocol.close()
+        return response.get("message") or "disconnected"
+
+        # try:
+        #     response = await asyncio.shield(self.chat_protocol.send({
+        #         "request_type": 2
+        #         }))
+        #     return response.get("message") or "disconnected"
+        # except Exception as e:
+        #     return f"failed to deliver disconnect message: {e}"
+        # finally:
+        #     self.session = None
+        #     self.chat_protocol.session = None
+        #     self.username = None
+        #     self.joined_channels = set()
+        #     self.chat_protocol.close()
 
     async def create_channel(self, channel, description):
         channel = channel.strip() if channel else ""
@@ -74,30 +86,38 @@ class ChatClient:
         if len(description) > 100:
             raise ValueError("description cant be longer than 100 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 4,
-                "channel": channel,
-                "description": description
-            })
-            self.joined_channels.add(channel)
-            return response
-        except RuntimeError as e:
-            print(f"couldnt create channel: {e}")
-            return {
-                "success": False,
-                "channel": channel,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.CHANNEL_CREATE,
+            "channel": channel,
+            "description": description
+        })
+        self.joined_channels.add(channel)
+        return response
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 4,
+        #         "channel": channel,
+        #         "description": description
+        #     })
+        #     self.joined_channels.add(channel)
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt create channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "channel": channel,
+        #         "error": str(e)
+        #     }
 
     async def list_channels(self):
         channels = []
         offset = 0
         max_pages = 50
-        page_count = 0
+        page_count = 1
 
         while page_count < max_pages:
-            request = {"request_type": 5}
+            request = {"request_type": OpCode.CHANNEL_LIST}
             if offset > 0:
                 request["offset"] = offset
             response = await self.chat_protocol.send(request)
@@ -120,22 +140,30 @@ class ChatClient:
             raise ValueError("channel name cant be empty")
         if len(channel) > 20:
             raise ValueError("channel name cant be longer than 20 characters")
+        
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.CHANNEL_INFO,
+            "channel": channel
+        })
+        if "members" not in response:
+            response["members"] = []
+        return response
 
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 6,
-                "channel": channel
-            })
-            if "members" not in response:
-                response["members"] = []
-            return response
-        except RuntimeError as e:
-            print(f"failed to get channel info: {e}")
-            return {
-                "success": False,
-                "channel": channel,
-                "error": str(e)
-            }
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 6,
+        #         "channel": channel
+        #     })
+        #     if "members" not in response:
+        #         response["members"] = []
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"failed to get channel info: {e}")
+        #     return {
+        #         "success": False,
+        #         "channel": channel,
+        #         "error": str(e)
+        #     }
 
     async def join_channel(self, channel):
         channel = channel.strip() if channel else ""
@@ -144,20 +172,27 @@ class ChatClient:
         if len(channel) > 20:
             raise ValueError("channel name cant be longer than 20 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 7,
-                "channel": channel
-            })
-            self.joined_channels.add(channel)
-            return response
-        except RuntimeError as e:
-            print(f"couldnt join channel: {e}")
-            return {
-                "success": False,
-                "channel": channel,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.CHANNEL_JOIN,
+            "channel": channel
+        })
+        self.joined_channels.add(channel)
+        return response
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 7,
+        #         "channel": channel
+        #     })
+        #     self.joined_channels.add(channel)
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt join channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "channel": channel,
+        #         "error": str(e)
+        #     }
         
     async def leave_channel(self, channel):
         channel = channel.strip() if channel else ""
@@ -166,20 +201,27 @@ class ChatClient:
         if len(channel) > 20:
             raise ValueError("channel name cant be longer than 20 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 8,
-                "channel": channel
-            })
-            self.joined_channels.discard(channel)
-            return response
-        except RuntimeError as e:
-            print(f"couldnt leave channel: {e}")
-            return {
-                "success": False,
-                "channel": channel,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.CHANNEL_LEAVE,
+            "channel": channel
+        })
+        self.joined_channels.discard(channel)
+        return response
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 8,
+        #         "channel": channel
+        #     })
+        #     self.joined_channels.discard(channel)
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt leave channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "channel": channel,
+        #         "error": str(e)
+        #     }
 
     async def message_channel(self, channel, message):
         channel = channel.strip() if channel else ""
@@ -193,20 +235,27 @@ class ChatClient:
         if len(message) > 500:
             raise ValueError("message cant be longer than 500 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 9,
-                "channel": channel,
-                "message": message
-            })
-            return response
-        except RuntimeError as e:
-            print(f"couldnt message channel: {e}")
-            return {
-                "success": False,
-                "channel": channel,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.CHANNEL_MESSAGE,
+            "channel": channel,
+            "message": message
+        })
+        return response
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 9,
+        #         "channel": channel,
+        #         "message": message
+        #     })
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt message channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "channel": channel,
+        #         "error": str(e)
+        #     }
 
     async def set_username(self, username):
         username = username.strip() if username else ""
@@ -219,19 +268,31 @@ class ChatClient:
         if len(username) > 20:
             raise ValueError("username cant be longer than 20 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 13,
-                "username": username
-            })
-            self.username = response.get("new_username") or self.username
-        except RuntimeError as e:
-            print(f"couldnt join channel: {e}")
-            return {
-                "success": False,
-                "username": username,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.SET_USERNAME,
+            "username": username
+        })
+        self.username = response.get("new_username") or self.username
+        return self.username
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 13,
+        #         "username": username
+        #     })
+        #     old_username = self.username
+        #     self.username = response.get("new_username") or self.username
+        #     return {
+        #         "old_username": old_username,
+        #         "new_username": self.username
+        #     }
+        # except RuntimeError as e:
+        #     print(f"couldnt join channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "username": username,
+        #         "error": str(e)
+        #     }
 
     async def list_users(self, channel=None):
         if channel:
@@ -242,10 +303,10 @@ class ChatClient:
         users = []
         offset = 0
         max_pages = 50
-        page_count = 0
+        page_count = 1
 
         while page_count < max_pages:
-            request = {"request_type": 14}
+            request = {"request_type": OpCode.USER_LIST}
             if channel:
                 request["channel"] = channel
             if offset > 0:
@@ -280,49 +341,66 @@ class ChatClient:
         if len(message) > 500:
             raise ValueError("message cant be longer than 500 characters")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 12,
-                "to_username": username,
-                "message": message
-            })
-            return response
-        except RuntimeError as e:
-            print(f"couldnt message user: {e}")
-            return {
-                "success": False,
-                "username": username,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.USER_MESSAGE,
+            "to_username": username,
+            "message": message
+        })
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 12,
+        #         "to_username": username,
+        #         "message": message
+        #     })
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt message user: {e}")
+        #     return {
+        #         "success": False,
+        #         "username": username,
+        #         "error": str(e)
+        #     }
 
     async def whoami(self):
         response = await self.chat_protocol.send({
-            "request_type": 11
+            "request_type": OpCode.WHOAMI
             })
-        return response.get("username") or self.username or "!!!UNKNOWN USER!!!"
+        username = response.get("username")
+        if not username:
+            raise RuntimeError("server returned empty username for whoami")
+        return username
 
     async def whois(self, username):
         username = username.strip() if username else ""
         if not username:
             raise ValueError("username cant be empty")
         
-        try:
-            response = await self.chat_protocol.send({
-                "request_type": 10,
-                "username": username
-            })
-            if "channels" not in response:
-                response["channels"] = []
-            return response
-        except RuntimeError as e:
-            print(f"couldnt join channel: {e}")
-            return {
-                "success": False,
-                "username": username,
-                "error": str(e)
-            }
+        response = await self.chat_protocol.send({
+            "request_type": OpCode.WHOIS,
+            "username": username
+        })
+        if "channels" not in response:
+            response["channels"] = []
+        return response
+        
+        # try:
+        #     response = await self.chat_protocol.send({
+        #         "request_type": 10,
+        #         "username": username
+        #     })
+        #     if "channels" not in response:
+        #         response["channels"] = []
+        #     return response
+        # except RuntimeError as e:
+        #     print(f"couldnt join channel: {e}")
+        #     return {
+        #         "success": False,
+        #         "username": username,
+        #         "error": str(e)
+        #     }
 
-    async def events(self):
+    async def dispatch_events(self):
         while True:
             try:
                 event = await self.chat_protocol.event_queue.get()

@@ -13,20 +13,22 @@ from eventDataclasses import (
     ServerShutdownEvent
 )
 from networkProtocols import BaseProtocol
-from enum import IntEnum
+from OpCode import OpCode
 
-OpCode = IntEnum("OpCode", [
-    ("CONNECT", 1),
-    ("DISCONNECT", 2),
-    ("ERROR", 20),
-    ("USER_MESSAGE", 33),
-    ("CHANNEL_MESSAGE", 30),
-    ("CHANNEL_JOIN", 28),
-    ("CHANNEL_LEAVE", 29),
-    ("USERNAME_CHANGE", 34),
-    ("SERVER_MESSAGE", 36),
-    ("SERVER_SHUTDOWN", 37)
-])
+# from enum import IntEnum
+
+# OpCode = IntEnum("OpCode", [
+#     ("CONNECT", 1),
+#     ("DISCONNECT", 2),
+#     ("ERROR", 20),
+#     ("USER_MESSAGE", 33),
+#     ("CHANNEL_MESSAGE", 30),
+#     ("CHANNEL_JOIN", 28),
+#     ("CHANNEL_LEAVE", 29),
+#     ("USERNAME_CHANGE", 34),
+#     ("SERVER_MESSAGE", 36),
+#     ("SERVER_SHUTDOWN", 37)
+# ])
 
 class ChatProtocol:
 
@@ -76,6 +78,9 @@ class ChatProtocol:
         finally:
              self.pending.pop(request_handle, None)
 
+    def close(self):
+        self.transport_protocol.close()
+
     def on_response(self, data: bytes):
         try:
             response = self.unpack(data)
@@ -111,29 +116,29 @@ class ChatProtocol:
 
     def make_event(self, response_type, response: dict):
         match response_type:
-            case OpCode.USER_MESSAGE:    # User Message
+            case OpCode.USER_MESSAGE_RESP:    # User Message
                 return UserMessageEvent(
                     username=response["from_username"],
                     message=response["message"]
                 )
-            case OpCode.CHANNEL_MESSAGE:    # Channel Message
+            case OpCode.CHANNEL_MESSAGE_RESP:    # Channel Message
                 return ChannelMessageEvent(
                     channel=response["channel"],
                     username=response["username"],
                     message=response["message"]
                 )
-            case OpCode.CHANNEL_JOIN:    # Channel Join
+            case OpCode.CHANNEL_JOIN_RESP:    # Channel Join
                 return ChannelJoinEvent(
                     channel=response["channel"],
                     username=response["username"],
                     description=response["description"]
                 )
-            case OpCode.CHANNEL_LEAVE:    # Channel Leave
+            case OpCode.CHANNEL_LEAVE_RESP:    # Channel Leave
                 return ChannelLeaveEvent(
                     channel=response["channel"],
                     username=response["username"]
                 )
-            case OpCode.USERNAME_CHANGE:    # Username Change
+            case OpCode.SET_USERNAME_RESP:    # Username Change
                 return UsernameChangeEvent(
                     old_username=response["old_username"],
                     new_username=response["new_username"]

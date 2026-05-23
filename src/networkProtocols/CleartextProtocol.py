@@ -17,7 +17,12 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
         self.on_response = on_response
         loop = asyncio.get_running_loop()
         try:
-            await loop.create_datagram_endpoint(lambda: self, remote_addr=(self.hostname, self.port))
+            if self.transport is not None:
+                raise RuntimeError("already started")
+            await loop.create_datagram_endpoint(
+                lambda: self,
+                remote_addr=(self.hostname, self.port)
+            )
         except Exception as e:
             raise ConnectionError(f"DNS went wrong 0_0: {e}") from None
 
