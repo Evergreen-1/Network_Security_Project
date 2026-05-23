@@ -115,41 +115,87 @@ class ChatProtocol:
                 print(f"issue with unsolicited response: {e}")
 
     def make_event(self, response_type, response: dict):
-        match response_type:
-            case OpCode.USER_MESSAGE_RESP:    # User Message
-                return UserMessageEvent(
-                    username=response["from_username"],
-                    message=response["message"]
-                )
-            case OpCode.CHANNEL_MESSAGE_RESP:    # Channel Message
-                return ChannelMessageEvent(
-                    channel=response["channel"],
-                    username=response["username"],
-                    message=response["message"]
-                )
-            case OpCode.CHANNEL_JOIN_RESP:    # Channel Join
-                return ChannelJoinEvent(
-                    channel=response["channel"],
-                    username=response["username"],
-                    description=response["description"]
-                )
-            case OpCode.CHANNEL_LEAVE_RESP:    # Channel Leave
-                return ChannelLeaveEvent(
-                    channel=response["channel"],
-                    username=response["username"]
-                )
-            case OpCode.SET_USERNAME_RESP:    # Username Change
-                return UsernameChangeEvent(
-                    old_username=response["old_username"],
-                    new_username=response["new_username"]
-                )
-            case OpCode.SERVER_MESSAGE:    # Server Message
-                return ServerMessageEvent(
-                    message=response["message"]
-                )
-            case OpCode.SERVER_SHUTDOWN:    # Server Shutdown
-                return ServerShutdownEvent(
-                    message=response["message"]
-                )
-            case _:
-                return None
+        try:
+            match response_type:
+                case OpCode.USER_MESSAGE_RESP:
+                    return UserMessageEvent(
+                        username=response.get("from_username", "unknown"),
+                        message=response.get("message", "")
+                    )
+                case OpCode.CHANNEL_MESSAGE_RESP:
+                    return ChannelMessageEvent(
+                        channel=response.get("channel", "unknown"),
+                        username=response.get("username", "unknown"),
+                        message=response.get("message", "")
+                    )
+                case OpCode.CHANNEL_JOIN_RESP:
+                    return ChannelJoinEvent(
+                        channel=response.get("channel", "unknown"),
+                        username=response.get("username", "unknown"),
+                        description=response.get("description", "")
+                    )
+                case OpCode.CHANNEL_LEAVE_RESP:
+                    return ChannelLeaveEvent(
+                        channel=response.get("channel", "unknown"),
+                        username=response.get("username", "unknown")
+                    )
+                case OpCode.SET_USERNAME_RESP:
+                    return UsernameChangeEvent(
+                        old_username=response.get("old_username", "unknown"),
+                        new_username=response.get("new_username", "unknown")
+                    )
+                case OpCode.SERVER_MESSAGE:
+                    return ServerMessageEvent(
+                        message=response.get("message", "")
+                    )
+                case OpCode.SERVER_SHUTDOWN:
+                    return ServerShutdownEvent(
+                        message=response.get("message", "server is shutting down.")
+                    )
+                case _:
+                    return None
+        except KeyError as e:
+            print(f"a key is missing from response: {e}")
+            return None
+        
+                # match response_type:
+        #     case OpCode.USER_MESSAGE_RESP:    # User Message
+        #         return UserMessageEvent(
+        #             username=response["from_username"],
+        #             message=response["message"]
+        #         )
+        #     case OpCode.CHANNEL_MESSAGE_RESP:    # Channel Message
+        #         return ChannelMessageEvent(
+        #             channel=response["channel"],
+        #             username=response["username"],
+        #             message=response["message"]
+        #         )
+        #     case OpCode.CHANNEL_JOIN_RESP:    # Channel Join
+        #         return ChannelJoinEvent(
+        #             channel=response["channel"],
+        #             username=response["username"],
+        #             description=response["description"]
+        #         )
+        #     case OpCode.CHANNEL_LEAVE_RESP:    # Channel Leave
+        #         return ChannelLeaveEvent(
+        #             channel=response["channel"],
+        #             username=response["username"]
+        #         )
+        #     case OpCode.SET_USERNAME_RESP:    # Username Change
+        #         return UsernameChangeEvent(
+        #             old_username=response["old_username"],
+        #             new_username=response["new_username"]
+        #         )
+        #     case OpCode.SERVER_MESSAGE:    # Server Message
+        #         return ServerMessageEvent(
+        #             message=response["message"]
+        #         )
+        #     case OpCode.SERVER_SHUTDOWN:    # Server Shutdown
+        #         return ServerShutdownEvent(
+        #             message=response["message"]
+        #         )
+        #     case _:
+        #         return None
+            
+            
+        

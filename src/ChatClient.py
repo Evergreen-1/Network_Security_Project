@@ -44,10 +44,20 @@ class ChatClient:
     async def disconnect(self):
         if not self.ping_task and not self.event_task and not self.session:
             return "already disconnected"
+        
         if self.ping_task and not self.ping_task.done():
             self.ping_task.cancel()
+            try:
+                await self.ping_task
+            except asyncio.CancelledError:
+                pass
+
         if self.event_task and not self.event_task.done():
             self.event_task.cancel()
+            try:
+                await self.event_task
+            except asyncio.CancelledError:
+                pass
 
         response = await asyncio.shield(self.chat_protocol.send({
             "request_type": OpCode.DISCONNECT
