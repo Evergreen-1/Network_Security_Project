@@ -13,6 +13,7 @@ from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionPr
 from src.ChatProtocol import ChatProtocol
 from src.ChatClient import ChatClient
 from src.networkProtocols.Encryption import Encryption
+from src.networkProtocols.Encryption import ExtendedEncryption
 
 RESOURCE_FOLDER = "res/"
 
@@ -627,6 +628,7 @@ class ChangeUsernameFrame(customtkinter.CTkFrame):
     def changeUsername(self):
         print("Changing username!", self.entryUsername.get())
         # TODO
+        
         username = self.entryUsername.get().strip()
         username = username.replace(":", "")
         if self.controller.transportProtocolInUse == "Cleartext":
