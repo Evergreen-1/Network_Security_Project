@@ -570,19 +570,17 @@ class SignInFrame(customtkinter.CTkFrame):
         self.btnCancel.place(relx=0.75, rely=0.75, relwidth=0.45, relheight=0.3, anchor=customtkinter.CENTER)
         
         self.server_key = base64.b64decode(b'ZixewENi85M3vxEUIu0TC5/nrzuUsHAT4ZTdhc8BC0M=')
-        #self.private_key = base64.b64decode(b'')
-        #print(self.server_key)
 
     @async_handler
     async def signIn(self):
         #print("Signing in!", self.entryPrivateKey.get())
-        self.private_key = base64.b64decode(bytes(self.entryPrivateKey.get(), 'utf-8'))
-        print(self.private_key)
+        private_key = base64.b64decode(bytes(self.entryPrivateKey.get(), 'utf-8'))
+        self.entryPrivateKey.delete(0, "end")
         
         if self.ExtendedTransport == False:
-            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(EncryptionProtocol(Encryption(self.private_key, self.server_key))))
+            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(EncryptionProtocol(Encryption(private_key, self.server_key))))
         else:
-            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(ExtendedEncryptionProtocol(self.private_key, self.server_key)))
+            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(ExtendedEncryptionProtocol(Encryption(private_key, self.server_key))))
         
         self.controller.transportProtocolInUse.on_event = self.controller.eventHandler.handleEvent
         message = await self.controller.transportProtocolInUse.connect()
