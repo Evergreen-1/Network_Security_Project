@@ -22,16 +22,19 @@ class ChatClient:
             "request_type": OpCode.CONNECT
             })
 
-        self.session = response.get("session")
+        self.session = response.get("session", None)
+        if not self.session:
+            raise RuntimeError("server did not return a session")
+        
         self.chat_protocol.session = self.session
         self.username = response.get("username")
 
-        self.ping_task = asyncio.create_task(self.ping())
-        self.event_task = asyncio.create_task(self.dispatch_events())
+        self.ping_task = asyncio.create_task(self._ping())
+        self.event_task = asyncio.create_task(self._dispatch_events())
 
         return response.get("message")
 
-    async def ping(self):
+    async def _ping(self):
         while True:
             try:
                 await asyncio.sleep(30)
@@ -40,9 +43,11 @@ class ChatClient:
                     })
             except asyncio.CancelledError:
                 break
+            except Exception as e:  # TODO: maybe also notify UI with an event?
+                print(f"ping failed: {e}")
 
     async def disconnect(self):
-        if not self.ping_task and not self.event_task and not self.session:
+        if not self.session:
             return "already disconnected"
         
         if self.ping_task and not self.ping_task.done():
@@ -59,29 +64,29 @@ class ChatClient:
             except asyncio.CancelledError:
                 pass
 
-        response = await asyncio.shield(self.chat_protocol.send({
-            "request_type": OpCode.DISCONNECT
-            }))
-        self.session = None
-        self.chat_protocol.session = None
-        self.username = None
-        self.joined_channels = set()
-        self.chat_protocol.close()
-        return response.get("message") or "disconnected"
+        # response = await asyncio.shield(self.chat_protocol.send({
+        #     "request_type": OpCode.DISCONNECT
+        #     }))
+        # self.session = None
+        # self.chat_protocol.session = None
+        # self.username = None
+        # self.joined_channels = set()
+        # self.chat_protocol.close()
+        # return response.get("message") or "disconnected"
 
-        # try:
-        #     response = await asyncio.shield(self.chat_protocol.send({
-        #         "request_type": 2
-        #         }))
-        #     return response.get("message") or "disconnected"
-        # except Exception as e:
-        #     return f"failed to deliver disconnect message: {e}"
-        # finally:
-        #     self.session = None
-        #     self.chat_protocol.session = None
-        #     self.username = None
-        #     self.joined_channels = set()
-        #     self.chat_protocol.close()
+        try:
+            response = await asyncio.shield(self.chat_protocol.send({
+                "request_type": OpCode.DISCONNECT
+                }))
+            return response.get("message") or "disconnected"
+        except Exception as e:
+            return f"failed to deliver disconnect message: {e}"
+        finally:
+            self.session = None
+            self.chat_protocol.session = None
+            self.username = None
+            self.joined_channels = set()
+            self.chat_protocol.close()
 
     async def create_channel(self, channel, description):
         channel = channel.strip() if channel else ""
@@ -356,6 +361,8 @@ class ChatClient:
             "to_username": username,
             "message": message
         })
+
+        return username
         
         # try:
         #     response = await self.chat_protocol.send({
@@ -375,7 +382,7 @@ class ChatClient:
     async def whoami(self):
         response = await self.chat_protocol.send({
             "request_type": OpCode.WHOAMI
-            })
+        })
         username = response.get("username")
         if not username:
             raise RuntimeError("server returned empty username for whoami")
@@ -410,7 +417,7 @@ class ChatClient:
         #         "error": str(e)
         #     }
 
-    async def dispatch_events(self):
+    async def _dispatch_events(self):
         while True:
             try:
                 event = await self.chat_protocol.event_queue.get()
@@ -418,8 +425,7 @@ class ChatClient:
                 if isinstance(event, UsernameChangeEvent):
                     if event.old_username == self.username:
                         self.username = event.new_username
-
-                if isinstance(event, ServerShutdownEvent):
+                elif isinstance(event, ServerShutdownEvent):
                     self.session = None
                     self.chat_protocol.session = self.session
                     self.username = None
@@ -430,3 +436,6 @@ class ChatClient:
 
             except asyncio.CancelledError:
                 break
+
+            except Exception as e:
+                print(f"error dispatching event: {e}")

@@ -57,7 +57,7 @@ class ChatProtocol:
     async def send(self, outgoing_data: dict) -> dict:
         if self.session:
             outgoing_data["session"] = self.session
-        elif outgoing_data["request_type"] not in (OpCode.CONNECT, OpCode.DISCONNECT):
+        elif outgoing_data["request_type"] != OpCode.CONNECT:
             raise RuntimeError("not in a session")
         
         while True:

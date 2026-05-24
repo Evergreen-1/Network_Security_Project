@@ -14,11 +14,11 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
         self.is_cleartext = True
 
     async def start(self, on_response):
+        if self.transport is not None:
+            raise RuntimeError("already started")
         self.on_response = on_response
         loop = asyncio.get_running_loop()
         try:
-            if self.transport is not None:
-                raise RuntimeError("already started")
             await loop.create_datagram_endpoint(
                 lambda: self,
                 remote_addr=(self.hostname, self.port)
@@ -35,6 +35,7 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
     def close(self):
         if self.transport:
             self.transport.close()
+            self.transport = None
             print(f"closed transport")
 
     def connection_made(self, transport):
@@ -43,7 +44,10 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
     def datagram_received(self, data: bytes, addr: tuple):
         if self.on_response:
-            self.on_response(data)
+            try:
+                self.on_response(data)
+            except Exception as e:
+                print(f"exception when datagram received: {e}")
 
     def error_received(self, exception):
         print(f"error: {exception}")
