@@ -580,7 +580,7 @@ class SignInFrame(customtkinter.CTkFrame):
         if self.ExtendedTransport == False:
             self.controller.transportProtocolInUse = ChatClient(ChatProtocol(EncryptionProtocol(Encryption(private_key, self.server_key))))
         else:
-            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(ExtendedEncryptionProtocol(Encryption(private_key, self.server_key))))
+            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(ExtendedEncryptionProtocol(ExtendedEncryption(private_key, self.server_key))))
         
         self.controller.transportProtocolInUse.on_event = self.controller.eventHandler.handleEvent
         message = await self.controller.transportProtocolInUse.connect()
@@ -629,7 +629,7 @@ class ChangeUsernameFrame(customtkinter.CTkFrame):
         # TODO
         username = self.entryUsername.get().strip()
         username = username.replace(":", "")
-        if self.controller.transport == "Cleartext":
+        if self.controller.transportProtocolInUse == "Cleartext":
             username = "clear-" + username
         length = len(username)
         if (length > 20):
