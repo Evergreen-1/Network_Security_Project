@@ -1,8 +1,8 @@
 import asyncio
-from src.networkProtocols.EncryptedProtocol import EncryptedProtocol
+from src.networkProtocols.EncryptionProtocol import EncryptionProtocol
 from src.networkProtocols.Encryption import ExtendedEncryption
 
-class ExtendedEncryptionProtocol(EncryptedProtocol):
+class ExtendedEncryptionProtocol(EncryptionProtocol):
     def __init__(self, encryption : ExtendedEncryption):
         super().__init__(encryption)
         self.port = 51821

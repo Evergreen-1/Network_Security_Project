@@ -2,7 +2,7 @@
 # LCKJOS003
 
 from src.networkProtocols.CleartextProtocol import CleartextProtocol
-from src.networkProtocols.EncryptedProtocol import EncryptionProtocol
+from src.networkProtocols.EncryptionProtocol import EncryptionProtocol
 from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionProtocol
 from src.ChatProtocol import ChatProtocol
 from src.ChatClient import ChatClient
