@@ -1,10 +1,18 @@
 # Main Menu
 import asyncio
+import base64
 import customtkinter
 from CTkToolTip import *
 from PIL import Image
 from async_tkinter_loop.mixins import AsyncCTk
-from async_tkinter_loop import async_handler # TODO add @async_handler on every async def func
+from async_tkinter_loop import async_handler
+from src import EventHandler
+from src.networkProtocols.CleartextProtocol import CleartextProtocol
+from src.networkProtocols.EncryptionProtocol import EncryptionProtocol
+from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionProtocol
+from src.ChatProtocol import ChatProtocol
+from src.ChatClient import ChatClient
+from src.networkProtocols.Encryption import Encryption
 
 RESOURCE_FOLDER = "res/"
 
@@ -63,7 +71,7 @@ def showChat(master, controller, messageList : list):
         lastSender = msg['sender']
 
 class ChatUI(customtkinter.CTk, AsyncCTk):
-    def __init__(self, protocols : dict):
+    def __init__(self):
         super().__init__()
 
         self.headingFont = ("Roboto", 24)
@@ -71,20 +79,21 @@ class ChatUI(customtkinter.CTk, AsyncCTk):
         self.msgTimeFont = ("Roboto", 12)
         self.textColour = '#FEA943'
         
-        self.transportProtocols = protocols
         self.transportProtocolInUse = None
 
         self.channelMessages = [] # dict of chats - channelName/user: [(msg1), (msg2), (msg3)] 
         self.userMessages = []
 	#[channelName/user, [(msg1), (msg2), (msg3)]]
-
-        # TODO add a chat for server only.
+	
         self.chatsWithUsers = []
         self.chatsWithChannels = []
         self.channels = []
         self.users = []
         
-        self.currentChannel = None
+        self.eventHandler = EventHandler.Handler(self, showChat)
+        
+        self.showChannel = False # if false, show user instead
+        self.currentChat = None
         
         self.frames = {}
 
@@ -245,7 +254,8 @@ class MainMenuFrame(customtkinter.CTkFrame):
     @async_handler
     async def JoinCleartextChat(self):
     	print("Joining chat as cleartext user!")
-    	self.controller.transportProtocolInUse = self.controller.transportProtocols["CleartextProtocol"]
+    	self.controller.transportProtocolInUse = ChatClient(ChatProtocol(CleartextProtocol()))
+    	self.controller.transportProtocolInUse.on_event = self.controller.eventHandler.handleEvent
     	message = await self.controller.transportProtocolInUse.connect()
     	
     	#print(message)
@@ -257,6 +267,9 @@ class MainMenuFrame(customtkinter.CTkFrame):
     	self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":"00:00"}]))
     	self.controller.userMessages.clear()
     	
+    	self.controller.currentChat = "Server"
+    	self.controller.showChannel = False
+    	
     	#print(self.controller.messages[0])
     	showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[0][1])
     	#print(self.controller.transportProtocolInUse.username)
@@ -267,16 +280,16 @@ class MainMenuFrame(customtkinter.CTkFrame):
     	self.controller.frames["ChattingFrame"].usernameFrame.lblUsername.configure(text = self.controller.transportProtocolInUse.username)	
     	self.controller.changeFrame("ChattingFrame")
     
-    def JoinEncryptedChat(self):
-    	print("joining cleartext!")
-    	# TODO
+    @async_handler
+    async def JoinEncryptedChat(self):
+    	print("Joining Encryption!")
+    	self.controller.frames["SignInFrame"].ExtendedTransport = False 
     	self.controller.changeFrame("SignInFrame")
     	
     def JoinExtendedEncryptionChat(self):
-    	print("joining cleartext!")
-    	# TODO
+    	print("Joining Extended Enctyption!")
+    	self.controller.frames["SignInFrame"].ExtendedTransport = True
     	self.controller.changeFrame("SignInFrame")
-
         
 class Chatting_UsernameFrame(customtkinter.CTkFrame):
     def __init__(self, parent, controller):
@@ -299,7 +312,6 @@ class Chatting_UsernameFrame(customtkinter.CTkFrame):
     
     def changeUsernameFunc(self):
         print("Changing username")
-        # TODO
         self.controller.changeFrame("ChangeUsernameFrame")
         
 
@@ -328,12 +340,11 @@ class Chatting_ChatListFrame(customtkinter.CTkFrame):
         messages = self.controller.userMessages[i][1]
         #print(messages)
         
-        if chatName == "Server":
-            self.controller.frames["ChattingFrame"].msgListFrame.sendMessageToolTip.show()
-            self.controller.frames["ChattingFrame"].msgListFrame.msgBox.configure(state="disabled")
-        else:
-            self.controller.frames["ChattingFrame"].msgListFrame.sendMessageToolTip.hide()
-            self.controller.frames["ChattingFrame"].msgListFrame.msgBox.configure(state="normal")
+        self.controller.currentChat = chatName
+        self.controller.showChannel = False
+        
+        self.controller.frames["ChattingFrame"].msgListFrame.sendMessageToolTip.hide()
+        self.controller.frames["ChattingFrame"].msgListFrame.msgBox.configure(state="normal")
         
         showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.userMessages[i][1]) 
     
@@ -346,14 +357,17 @@ class Chatting_ChatListFrame(customtkinter.CTkFrame):
         messages = self.controller.channelMessages[i][1]
         #print(messages)
         
-        if chatName == "Server":
+        self.controller.currentChat = channel
+        self.controller.showChannel = True
+        
+        if channel == "Server":
             self.controller.frames["ChattingFrame"].msgListFrame.sendMessageToolTip.show()
             self.controller.frames["ChattingFrame"].msgListFrame.msgBox.configure(state="disabled")
         else:
             self.controller.frames["ChattingFrame"].msgListFrame.sendMessageToolTip.hide()
             self.controller.frames["ChattingFrame"].msgListFrame.msgBox.configure(state="normal")
         
-        showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessagesmessages[i][1])
+        showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[i][1])
     
     @async_handler
     async def showChannelDetails(self, channelName):
@@ -396,6 +410,7 @@ class Chatting_ChatListFrame(customtkinter.CTkFrame):
         
         userDetailText = "Username: " + userDetails["username"] + "\nChannels: " + channels + "\nTransport: " + userDetails["transport"] + "\nPublic Key: " + str(userDetails["wireguard_public_key"])  
         
+        self.controller.frames["UserDetailsFrame"].username = userDetails["username"]
         self.controller.frames["UserDetailsFrame"].userDetails.insert("0.0", userDetailText)
         self.controller.changeFrame("UserDetailsFrame")
     
@@ -414,14 +429,14 @@ class Chatting_ChatListFrame(customtkinter.CTkFrame):
                 for chat in self.controller.chatsWithChannels:
             	    newChat = customtkinter.CTkFrame(master=self.chatList)
             	    
-            	    btnchatName = customtkinter.CTkButton(newChat, text=chat, font= self.controller.msgNameFont, command=lambda chat=chat: self.openChat(chat))
+            	    btnchatName = customtkinter.CTkButton(newChat, text=chat, font= self.controller.msgNameFont, command=lambda chat=chat: self.openChannel(chat))
             	    btnchatName.pack(anchor="center", fill='x', expand=True)
             	    
             	    newChat.pack(anchor='center', padx=1, pady=3, fill='x', expand=True)
                 for chat in self.controller.chatsWithUsers:
                     newChat = customtkinter.CTkFrame(master=self.chatList)
                     
-                    btnchatName = customtkinter.CTkButton(newChat, text=chat, font= self.controller.msgNameFont, command=lambda chat=chat: self.openChannel(chat))
+                    btnchatName = customtkinter.CTkButton(newChat, text=chat, font= self.controller.msgNameFont, command=lambda chat=chat: self.openChat(chat))
                     btnchatName.pack(anchor="center", fill='x', expand=True)
             	    
                     newChat.pack(anchor='center', padx=1, pady=3, fill='x', expand=True) 
@@ -499,15 +514,31 @@ class Chatting_MessageListFrame(customtkinter.CTkFrame):
 
     @async_handler
     async def sendMessage(self):
-        # TODO
         print("sending msg!!")
-        if msgBox
+        msgText = self.msgBox.get()
+        self.msgBox.delete(0, "end")
+        if len(msgText)<=0:
+            return
         
-        if self.controller.currentChannel != "Server":
-            #await self.controller.transportProtocolInUse.message_channel(self.controller.currentChannel, )
+        if (not((self.controller.currentChat == "Server") and (self.controller.showChannel == True))):            
+            if self.controller.showChannel:
+                await self.controller.transportProtocolInUse.message_channel(self.controller.currentChat, msgText)
+                i = 0
+                while self.controller.channelMessages[i][0] != self.controller.currentChat:
+                    i+=1
+                self.controller.channelMessages[i][1].append({"sender": self.controller.transportProtocolInUse.username, "text": msgText, "time":"00:00"})
+                showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[i][1])
+            else:
+                await self.controller.transportProtocolInUse.message_user(self.controller.currentChat, msgText)
+                i = 0
+                while self.controller.userMessages[i][0] != self.controller.currentChat:
+                    i+=1
+                self.controller.userMessages[i][1].append({"sender":self.controller.transportProtocolInUse.username, "text": msgText, "time":"00:00"})
+                showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.userMessages[i][1])
+            print("msg sent")
         else:
-            #TODO
-            print("Oh no!!!!!!!!!!!!!! THEE CAARRRRRR!!!")
+            print("Cannot send messages to the server, ignoring button press")
+            return
         
 class ChattingFrame(customtkinter.CTkFrame):
     def __init__(self, parent, controller):
@@ -537,11 +568,46 @@ class SignInFrame(customtkinter.CTkFrame):
         
         self.btnCancel = customtkinter.CTkButton(self, text="Cancel", command=lambda: controller.changeFrame("MainMenuFrame"))
         self.btnCancel.place(relx=0.75, rely=0.75, relwidth=0.45, relheight=0.3, anchor=customtkinter.CENTER)
+        
+        self.server_key = base64.b64decode(b'ZixewENi85M3vxEUIu0TC5/nrzuUsHAT4ZTdhc8BC0M=')
+        #self.private_key = base64.b64decode(b'')
+        #print(self.server_key)
 
-    def signIn(self):
-        print("Signing in!", self.entryPrivateKey.get())
-        # TODO
-        self.controller.changeFrame("ChattingFrame")   
+    @async_handler
+    async def signIn(self):
+        #print("Signing in!", self.entryPrivateKey.get())
+        self.private_key = base64.b64decode(bytes(self.entryPrivateKey.get(), 'utf-8'))
+        print(self.private_key)
+        
+        if self.ExtendedTransport == False:
+            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(EncryptionProtocol(Encryption(self.private_key, self.server_key))))
+        else:
+            self.controller.transportProtocolInUse = ChatClient(ChatProtocol(ExtendedEncryptionProtocol(self.private_key, self.server_key)))
+        
+        self.controller.transportProtocolInUse.on_event = self.controller.eventHandler.handleEvent
+        message = await self.controller.transportProtocolInUse.connect()
+    	
+    	#print(message)
+    	
+        self.controller.chatsWithUsers.clear()
+        self.controller.chatsWithChannels.clear()
+        self.controller.chatsWithChannels.append("Server")
+        self.controller.channelMessages.clear()
+        self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":"00:00"}]))
+        self.controller.userMessages.clear()
+    	
+        self.controller.currentChat = "Server"
+        self.controller.showChannel = False
+    	
+    	#print(self.controller.messages[0])
+        showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[0][1])
+    	#print(self.controller.transportProtocolInUse.username)
+    	
+        self.controller.updateUsersTask = asyncio.create_task(self.controller.updateUsers())
+        self.controller.updateChannelsTask = asyncio.create_task(self.controller.updateChannels())
+    	
+        self.controller.frames["ChattingFrame"].usernameFrame.lblUsername.configure(text = self.controller.transportProtocolInUse.username)	
+        self.controller.changeFrame("ChattingFrame")
 
 class ChangeUsernameFrame(customtkinter.CTkFrame):
     def __init__(self, parent, controller):
@@ -665,9 +731,13 @@ class UserDetailsFrame(customtkinter.CTkFrame):
 
     def MsgUser(self):
         print("Start chat with user!!")
-        # TODO
+        
+        if (not(self.username in self.controller.chatsWithUsers)):
+            self.controller.chatsWithUsers.append(self.username)
+            self.controller.userMessages.append((self.username, []))
+        
         self.controller.changeFrame("ChattingFrame")
-
+        self.controller.frames["ChattingFrame"].chatListFrame.openChat(self.username)
 
 if "__main__" == __name__:
     app = ChatUI()

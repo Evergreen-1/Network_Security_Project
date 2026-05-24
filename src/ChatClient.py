@@ -344,11 +344,11 @@ class ChatClient:
         username = username.strip() if username else ""
         if not username:
             raise ValueError("username cant be empty")
-        if self.chat_protocol.is_cleartext and not username.startswith("clear-"):
+        if self.chat_protocol.is_cleartext and not (username.startswith("clear-") or username.startswith("cleartext_user_")):
             raise ValueError("cleartext usernames have to start with 'clear-'")
         if ':' in username:
             raise ValueError("cant have colon in username")
-        if len(username) > 20:
+        if len(username) > 23:
             raise ValueError("username cant be longer than 20 characters")
         
         if not message or message.isspace():

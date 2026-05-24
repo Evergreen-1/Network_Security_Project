@@ -1,6 +1,6 @@
-from src.networkProtocols.BaseProtocol import BaseProtocol
 import asyncio
-from src.networkProtocols.Encryption import Encryption
+from src.networkProtocols import BaseProtocol
+from src.networkProtocols import Encryption
 
 class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
@@ -22,12 +22,6 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
         await loop.create_datagram_endpoint(lambda: self, remote_addr=(self.hostname, self.port))
         await self._do_handshake()
 
-    def close(self):
-        if self.transport:
-            self.transport.close()
-            self.transport = None
-            print(f"closed transport")
-
     def connection_made(self, transport):
         self.transport = transport
         print(f"Socket bound to {self.hostname}:{self.port}")
@@ -35,7 +29,7 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
     def send(self, data: bytes):
         if self.transport:
             wireguard_wrap = self.encryption.encrypt_transport(data)
-            self.transport.sendto(wireguard_wrap, None)
+            self.transport.send(wireguard_wrap)
         else:
             raise RuntimeError("cant send; transport not initialised")
 
@@ -55,11 +49,11 @@ class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
         for attempt in range(self.MAX_ATTEMPTS):
             try: 
-                self.transport.sendto(packet, None)
+                self.transport.send(packet)
                 await asyncio.wait_for(self.handshake_done, timeout=5.0)
                 return
             except asyncio.TimeoutError:
-                print("Attempt "+ str(attempt) + " failed due to timeout")
+                print("Attempt "+ attempt + " failed due to timeout")
                 if (attempt == self.MAX_ATTEMPTS-1):    #last interation
                     raise TimeoutError(f"{packet} timed out")
                 self.handshake_done = asyncio.get_running_loop().create_future()    #reset for next iteration

@@ -15,13 +15,19 @@ class ExtendedEncryptionProtocol(EncryptionProtocol):
         await loop.create_datagram_endpoint(lambda: self, remote_addr=(self.hostname, self.port))
         await self._do_handshake()
 
+    def close(self):
+        if self.transport:
+            self.transport.close()
+            self.transport = None
+            print(f"closed transport")
+
     async def _do_handshake(self):
         loop = asyncio.get_running_loop()
         cookie = None
 
         while True:
             packet = self.encryption.build_send_packet(cookie)
-            self.transport.sendto(packet)
+            self.transport.sendto(packet, None)
 
             self.handshake_packet = loop.create_future()
 
