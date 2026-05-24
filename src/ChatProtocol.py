@@ -3,7 +3,7 @@
 import asyncio
 import msgpack
 import random
-from eventDataclasses import (
+from src.eventDataclasses import (
     UserMessageEvent,
     ChannelMessageEvent,
     ChannelJoinEvent,
@@ -12,8 +12,8 @@ from eventDataclasses import (
     ServerMessageEvent,
     ServerShutdownEvent
 )
-from networkProtocols import BaseProtocol
-from OpCode import OpCode
+from src.networkProtocols import BaseProtocol
+from src.OpCode import OpCode
 
 # from enum import IntEnum
 

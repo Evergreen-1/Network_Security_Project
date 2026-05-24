@@ -1,14 +1,17 @@
 # JFFSYE002
 # LCKJOS003
 
-import Encryption
-import ChatProtocol
-import ChatUI
+from src.networkProtocols.CleartextProtocol import CleartextProtocol
+#from src.networkProtocols.EncryptedProtocol import EncryptionProtocol
+#from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionProtocol
+from src.ChatProtocol import ChatProtocol
+from src.ChatClient import ChatClient
+from src import ChatUI
+from async_tkinter_loop import async_mainloop
+import asyncio
 
 def main():
     print("Hello from network-security-project!")
-    ChatUI.customtkinter.set_appearance_mode("dark")  # Modes: system (default), light, dark
-    ChatUI.customtkinter.set_default_color_theme("FlaresOfTheBlazingSun.json")
 
     #ncry = ncryt(server key, userPrivate)
 
@@ -16,10 +19,14 @@ def main():
     # call build_send_packet and send that to server durng handshake
     # call parseResponse on server's handshake response
     # call encryptTransport(payload) to send and
-    # call decryptTransport(payload) to recieve
+    # call decryptTransport(payload) to recieve  
     
-    app = ChatUI.ChatUI()
-    app.mainloop()
+    protocols = {
+    "CleartextProtocol" : ChatClient(ChatProtocol(CleartextProtocol()))
+    }
+    
+    app = ChatUI.ChatUI(protocols)
+    app.async_mainloop()
 
 if __name__ == "__main__":
     main()

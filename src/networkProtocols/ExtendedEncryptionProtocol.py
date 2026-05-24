@@ -1,6 +1,6 @@
 import asyncio
-import EncryptedProtocol
-import Encryption
+from src.networkProtocols import EncryptedProtocol
+from src.networkProtocols.Encryption import Encryption
 
 class ExtendedEncryptionProtocol(EncryptedProtocol):
     def __init__(self, encryption : Encryption.ExtendedEncryption):

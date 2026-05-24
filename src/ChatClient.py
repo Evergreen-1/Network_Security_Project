@@ -1,9 +1,9 @@
 # KRNRUA001
 
-from ChatProtocol import ChatProtocol
-from eventDataclasses import UsernameChangeEvent, ServerShutdownEvent
+from src.ChatProtocol import ChatProtocol
+from src.eventDataclasses import UsernameChangeEvent, ServerShutdownEvent
 import asyncio
-from OpCode import OpCode
+from src.OpCode import OpCode
 
 class ChatClient:
 
@@ -128,8 +128,8 @@ class ChatClient:
     async def list_channels(self):
         channels = []
         offset = 0
-        max_pages = 50
-        page_count = 1
+        max_pages = 100
+        page_count = 0
 
         while page_count < max_pages:
             request = {"request_type": OpCode.CHANNEL_LIST}
@@ -318,7 +318,7 @@ class ChatClient:
         users = []
         offset = 0
         max_pages = 50
-        page_count = 1
+        page_count = 0
 
         while page_count < max_pages:
             request = {"request_type": OpCode.USER_LIST}

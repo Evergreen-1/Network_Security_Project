@@ -1,6 +1,6 @@
 # KRNRUA001
 
-from .BaseProtocol import BaseProtocol
+from src.networkProtocols.BaseProtocol import BaseProtocol
 import asyncio
 
 class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
@@ -28,7 +28,7 @@ class CleartextProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
     def send(self, data: bytes):
         if self.transport:
-            self.transport.send(data)
+            self.transport.sendto(data, None)
         else:
             raise RuntimeError("cant send; transport not initialised")
 

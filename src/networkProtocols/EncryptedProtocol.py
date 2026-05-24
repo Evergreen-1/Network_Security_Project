@@ -1,6 +1,6 @@
 import asyncio
-import BaseProtocol
-import Encryption
+from src.networkProtocols.BaseProtocol import BaseProtocol
+from src.networkProtocols.Encryption import Encryption
 
 class EncryptionProtocol(BaseProtocol, asyncio.DatagramProtocol):
 
