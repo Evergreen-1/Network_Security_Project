@@ -2,8 +2,8 @@
 # LCKJOS003
 
 from src.networkProtocols.CleartextProtocol import CleartextProtocol
-#from src.networkProtocols.EncryptedProtocol import EncryptionProtocol
-#from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionProtocol
+from src.networkProtocols.EncryptedProtocol import EncryptionProtocol
+from src.networkProtocols.ExtendedEncryptionProtocol import ExtendedEncryptionProtocol
 from src.ChatProtocol import ChatProtocol
 from src.ChatClient import ChatClient
 from src import ChatUI
@@ -22,7 +22,9 @@ def main():
     # call decryptTransport(payload) to recieve  
     
     protocols = {
-    "CleartextProtocol" : ChatClient(ChatProtocol(CleartextProtocol()))
+    "CleartextProtocol" : ChatClient(ChatProtocol(CleartextProtocol())),
+    "EncryptionProtocol": ChatClient(ChatProtocol(EncryptionProtocol())),
+    "ExtendedEncryptionProtocol": ChatClient(ChatProtocol(ExtendedEncryptionProtocol()))
     }
     
     app = ChatUI.ChatUI(protocols)
