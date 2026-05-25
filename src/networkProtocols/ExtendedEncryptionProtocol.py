@@ -1,7 +1,11 @@
+#ExtendedEncryption Protocol    LCKJOS003
 import asyncio
 from src.networkProtocols.EncryptionProtocol import EncryptionProtocol
 from src.networkProtocols.Encryption import ExtendedEncryption
-
+#class ExtendedEncryption Protocol
+    #description:
+    #     This class handles the extended encryption protocol required from the chat server via the ExtendedEncryption class
+    #     As well as extending the Encryption Protocol while overwriting the init, start, close, _do_handshake
 class ExtendedEncryptionProtocol(EncryptionProtocol):
     def __init__(self, encryption : ExtendedEncryption):
         super().__init__(encryption)
@@ -9,6 +13,7 @@ class ExtendedEncryptionProtocol(EncryptionProtocol):
         self.handshake_packet = None
 
     async def start(self, on_response):
+        #starts the protocol to async
         self.on_response = on_response
         loop = asyncio.get_running_loop()
 
@@ -16,12 +21,15 @@ class ExtendedEncryptionProtocol(EncryptionProtocol):
         await self._do_handshake()
 
     def close(self):
+        #closes the connection to server
         if self.transport:
             self.transport.close()
             self.transport = None
             print(f"closed transport")
 
     async def _do_handshake(self):
+        #performs the handshake with the server, initally sends zerod mac2 then waits for value from the server in type 0x03 message
+        #then continues normally after cookie is set
         loop = asyncio.get_running_loop()
         cookie = None
 
@@ -41,6 +49,7 @@ class ExtendedEncryptionProtocol(EncryptionProtocol):
                 cookie = self.encryption.parse_cookie_reply(data)
 
     def datagram_received(self, data: bytes, addr: tuple):
+        #handles data when it is recieved 
         if self.handshake_packet and not self.handshake_packet.done():  #Checking to see if handshake is still in progress
             if data[0] in (0x02,0x03):
                 self.handshake_packet.set_result(data)
