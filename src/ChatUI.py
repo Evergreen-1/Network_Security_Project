@@ -6,6 +6,7 @@ from CTkToolTip import *
 from PIL import Image
 from async_tkinter_loop.mixins import AsyncCTk
 from async_tkinter_loop import async_handler
+from datetime import datetime
 from src import EventHandler
 from src.networkProtocols.CleartextProtocol import CleartextProtocol
 from src.networkProtocols.EncryptionProtocol import EncryptionProtocol
@@ -26,17 +27,42 @@ def create_bubble(master, controller, text, senderName="You", messageTime="00:00
     text_color = ("black", "white")
     anchor = "e" if side == "right" else "w"
     othranchor = "w" if side == "right" else "e"
+    
+    if side == "middle":
+       anchor = "center"
+       fg_color = ("#333333", "#242424")
+    
     msgFrame = customtkinter.CTkFrame(master, fg_color='transparent', border_width=0)
     
     padYVal = 5
+    
+    if side == "middle":
+        bubbleFrame = customtkinter.CTkFrame(msgFrame, fg_color='transparent', border_width=0)
+    
+        bubble = customtkinter.CTkLabel(
+        bubbleFrame,
+        text=text, 
+        corner_radius=15, 
+        fg_color=fg_color,
+        text_color=text_color,
+        padx=0,
+        pady=padYVal,
+        wraplength=500 # Ensures text wraps in the bubble
+        )
+        bubble.pack(anchor=anchor, pady=0, padx=0)
+        bubbleFrame.pack(anchor=anchor, pady=0, padx=0)
+        msgFrame.pack(anchor=anchor, pady=0, padx=10)
+        return msgFrame
     
     if showName:
         lblsenderName = customtkinter.CTkLabel(msgFrame, text=senderName, font=controller.msgNameFont, text_color=controller.textColour)
         lblsenderName.pack(anchor=anchor, pady=0, padx=0)
         padYVal = 0
     
+    bubbleFrame = customtkinter.CTkFrame(msgFrame, fg_color='transparent', border_width=0)
+    
     bubble = customtkinter.CTkLabel(
-        msgFrame,
+        bubbleFrame,
         text=text, 
         corner_radius=15, 
         fg_color=fg_color,
@@ -47,9 +73,10 @@ def create_bubble(master, controller, text, senderName="You", messageTime="00:00
     )
     bubble.pack(anchor=anchor, pady=0, padx=0)
     bubbleWidth = bubble.winfo_width()
-    lblmsgTime = customtkinter.CTkLabel(msgFrame, text=messageTime, font=controller.msgTimeFont, text_color=controller.textColour)
+    lblmsgTime = customtkinter.CTkLabel(bubbleFrame, text=messageTime, font=controller.msgTimeFont, text_color=controller.textColour)
     lblmsgTime.pack(anchor=othranchor, pady=0, padx=10)
     #lblmsgTime.pack(anchor=anchor, padx=(bubbleWidth, 0))
+    bubbleFrame.pack(anchor=anchor, pady=0, padx=0)
     msgFrame.pack(anchor=anchor, pady=0, padx=10)
     return msgFrame
 
@@ -64,7 +91,9 @@ def showChat(master, controller, messageList : list):
         side = "left"
         if msg["sender"] == controller.transportProtocolInUse.username:
             side = "right"
-        
+        if msg["sender"] == "":
+            side = "middle"
+        print("side is: ", side)
         if lastSender == msg['sender']:
             create_bubble(master, controller, msg['text'], msg['sender'], msg['time'], side, False)
         else:
@@ -114,6 +143,12 @@ class ChatUI(customtkinter.CTk, AsyncCTk):
        while self.transportProtocolInUse:
           self.users = await self.transportProtocolInUse.list_users()
           print("Found list of users: ", self.users)
+          #for user in self.users:
+          #    if (not (user in newUsersList)):
+          #        i = 0
+          #        while (userMessages[i][0] != user):
+          #            i += 1
+          #        usermessages.pop(i)
           await asyncio.sleep(60)
     
     async def updateChannels(self):
@@ -260,12 +295,13 @@ class MainMenuFrame(customtkinter.CTkFrame):
     	message = await self.controller.transportProtocolInUse.connect()
     	
     	#print(message)
+    	msgTime = datetime.now().strftime("%H:%M:%S")
     	
     	self.controller.chatsWithUsers.clear()
     	self.controller.chatsWithChannels.clear()
     	self.controller.chatsWithChannels.append("Server")
     	self.controller.channelMessages.clear()
-    	self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":"00:00"}]))
+    	self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":msgTime}]))
     	self.controller.userMessages.clear()
     	
     	self.controller.currentChat = "Server"
@@ -459,12 +495,13 @@ class Chatting_ChatListFrame(customtkinter.CTkFrame):
             	    newChat.pack(anchor='center', padx=1, pady=3, fill='x', expand=True)
             case "Online Users":
                 for user in self.controller.users:
-            	    newChat = customtkinter.CTkFrame(master=self.chatList)
+                    if user != self.controller.transportProtocolInUse.username:
+            	        newChat = customtkinter.CTkFrame(master=self.chatList)
             	    
-            	    btnchatName = customtkinter.CTkButton(newChat, text=user, font= self.controller.msgNameFont, command=lambda user=user: self.showUserDetails(user))
-            	    btnchatName.pack(anchor="center", fill='x', expand=True)
+            	        btnchatName = customtkinter.CTkButton(newChat, text=user, font= self.controller.msgNameFont, command=lambda user=user: self.showUserDetails(user))
+            	        btnchatName.pack(anchor="center", fill='x', expand=True)
             	    
-            	    newChat.pack(anchor='center', padx=1, pady=3, fill='x', expand=True)
+            	        newChat.pack(anchor='center', padx=1, pady=3, fill='x', expand=True)
             case _:
                 print("Error!!! invalid option selected for chat type. option:", value)
 
@@ -520,21 +557,21 @@ class Chatting_MessageListFrame(customtkinter.CTkFrame):
         self.msgBox.delete(0, "end")
         if len(msgText)<=0:
             return
-        
+        msgTime = datetime.now().strftime("%H:%M:%S")
         if (not((self.controller.currentChat == "Server") and (self.controller.showChannel == True))):            
             if self.controller.showChannel:
                 await self.controller.transportProtocolInUse.message_channel(self.controller.currentChat, msgText)
                 i = 0
                 while self.controller.channelMessages[i][0] != self.controller.currentChat:
                     i+=1
-                self.controller.channelMessages[i][1].append({"sender": self.controller.transportProtocolInUse.username, "text": msgText, "time":"00:00"})
+                self.controller.channelMessages[i][1].append({"sender": self.controller.transportProtocolInUse.username, "text": msgText, "time":msgTime})
                 showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[i][1])
             else:
                 await self.controller.transportProtocolInUse.message_user(self.controller.currentChat, msgText)
                 i = 0
                 while self.controller.userMessages[i][0] != self.controller.currentChat:
                     i+=1
-                self.controller.userMessages[i][1].append({"sender":self.controller.transportProtocolInUse.username, "text": msgText, "time":"00:00"})
+                self.controller.userMessages[i][1].append({"sender":self.controller.transportProtocolInUse.username, "text": msgText, "time":msgTime})
                 showChat(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.userMessages[i][1])
             print("msg sent")
         else:
@@ -588,11 +625,13 @@ class SignInFrame(customtkinter.CTkFrame):
     	
     	#print(message)
     	
+        msgTime = datetime.now().strftime("%H:%M:%S")
+    	
         self.controller.chatsWithUsers.clear()
         self.controller.chatsWithChannels.clear()
         self.controller.chatsWithChannels.append("Server")
         self.controller.channelMessages.clear()
-        self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":"00:00"}]))
+        self.controller.channelMessages.append(("Server", [{"sender":"Server", "text": message, "time":msgTime}]))
         self.controller.userMessages.clear()
     	
         self.controller.currentChat = "Server"
@@ -625,21 +664,35 @@ class ChangeUsernameFrame(customtkinter.CTkFrame):
         self.btnCancel = customtkinter.CTkButton(self, text="Cancel", command=lambda: controller.changeFrame("ChattingFrame"))
         self.btnCancel.place(relx=0.75, rely=0.75, relwidth=0.45, relheight=0.3, anchor=customtkinter.CENTER)
 
-    def changeUsername(self):
+    @async_handler
+    async def changeUsername(self):
         print("Changing username!", self.entryUsername.get())
-        # TODO
-        
         username = self.entryUsername.get().strip()
         username = username.replace(":", "")
-        if self.controller.transportProtocolInUse == "Cleartext":
-            username = "clear-" + username
+        if isinstance(self.controller.transportProtocolInUse, CleartextProtocol):
+            if not(username.startsWith("clear-")):
+                username = "clear-" + username
         length = len(username)
         if (length > 20):
             length = 20
         username = username[0:length]
         
-        print("Formatted username:", username)
+        #print("Formatted username:", username)
         
+        oldUsername = self.controller.transportProtocolInUse.username
+        response = await self.controller.transportProtocolInUse.set_username(username)
+        
+        for msg in self.controller.userMessages:
+            for text in msg[1]:
+                if text["sender"] == oldUsername:
+                    text["sender"] = response
+        for channelMsgs in self.controller.userMessages:
+            for text in channelMsgs[1]:
+                if text["sender"] == oldUsername:
+                    text["sender"] = response
+        #print(response)
+        
+        self.controller.frames["ChattingFrame"].usernameFrame.lblUsername.configure(text = self.controller.transportProtocolInUse.username)
         self.controller.changeFrame("ChattingFrame")
 
 class ChannelDetailsFrame(customtkinter.CTkFrame):
