@@ -262,7 +262,19 @@ class ChatUI(customtkinter.CTk, AsyncCTk):
     async def exitChattingApp(self):
         if self.transportProtocolInUse:
             self.updateUsersTask.cancel()
+            try:
+                await self.updateUsersTask
+            except asyncio.CancelledError:
+                pass
             self.updateChannelsTask.cancel()
+            try:
+                await self.updateChannelsTask
+            except asyncio.CancelledError:
+                pass
+            #try:
+            #    await asyncio.gather(self.updateUsersTask, self.updateChannelsTask, return_exceptions=True)
+            #except asyncio.CancelledError:
+            #    pass
             await self.transportProtocolInUse.disconnect()
         self.destroy()
 
@@ -518,7 +530,15 @@ class Chatting_SignOutFrame(customtkinter.CTkFrame):
     async def signOut(self):
         if self.controller.transportProtocolInUse:
             self.controller.updateUsersTask.cancel()
+            try:
+                await self.controller.updateUsersTask
+            except asyncio.CancelledError:
+                pass
             self.controller.updateChannelsTask.cancel()
+            try:
+                await self.controller.updateChannelsTask
+            except asyncio.CancelledError:
+                pass
             await self.controller.transportProtocolInUse.disconnect()
             self.controller.transportProtocolInUse = None
         self.controller.changeFrame("MainMenuFrame")
