@@ -44,7 +44,7 @@ class Handler():
                 i += 1
             self.controller.userMessages[i][1].append({"sender":event.username, "text": event.message, "time":"00:00"})
             if self.controller.showChannel == False and self.controller.currentChat == event.username:
-                self.updateMessages(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[i][1])
+                self.updateMessages(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.userMessages[i][1])
         print(f"[DM from {event.username}]: {event.message}")
 
     def onUserJoin(self, event: ChannelJoinEvent):

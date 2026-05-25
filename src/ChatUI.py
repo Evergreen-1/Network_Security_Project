@@ -700,7 +700,7 @@ class NewChannelFrame(customtkinter.CTkFrame):
         self.entryChannelDesc.insert("0.0", "Enter new channel decription here.")
         self.entryChannelDesc.place(relx=0.5, rely=0.45, relwidth=0.7, relheight=0.4, anchor="center")
 
-        self.channelNameToolTip = CTkToolTip(self.entryChannelDesc, message="Channel description is limited to 100 chars.\n Any excess will be trimmed.")
+        self.channelDescToolTip = CTkToolTip(self.entryChannelDesc, message="Channel description is limited to 100 chars.\n Any excess will be trimmed.")
 
         self.btnCreateChannel = customtkinter.CTkButton(self, text="Create Channel", command=lambda: self.CreateChannel())
         self.btnCreateChannel.place(relx=0.255, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
@@ -708,9 +708,28 @@ class NewChannelFrame(customtkinter.CTkFrame):
         self.btnCancel = customtkinter.CTkButton(self, text="Cancel", command=lambda: controller.changeFrame("ChattingFrame"))
         self.btnCancel.place(relx=0.745, rely=0.84, relwidth=0.47, relheight=0.25, anchor=customtkinter.CENTER)
 
-    def CreateChannel(self):
+    @async_handler
+    async def CreateChannel(self):
         print("Created Channel!!")
         # TODO
+        name = self.entryChannelName.get()
+        self.entryChannelName.delete(0, "end")
+        
+        if ((name in self.controller.channels) or (len(name) == 0) or (len(name) > 20)):
+            return
+        
+        desc = self.entryChannelDesc.get("1.0", "end-1c")
+        self.entryChannelDesc.delete("1.0", "end")
+        
+        if ((len(desc) == 0) or (len(desc) > 20)):
+            return
+        
+        response = await self.controller.transportProtocolInUse.create_channel(name, desc) 
+        
+        self.controller.channels.append(response["channel"])
+        self.controller.chatsWithChannels.append(response["channel"])
+        self.controller.channelMessages.append((response["channel"], []))
+        
         self.controller.changeFrame("ChattingFrame")
 
 class UserDetailsFrame(customtkinter.CTkFrame):
