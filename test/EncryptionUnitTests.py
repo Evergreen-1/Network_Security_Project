@@ -1,3 +1,4 @@
+#LCKJOS003
 import unittest
 import nacl.public
 import nacl.bindings
@@ -5,14 +6,11 @@ import time
 from nacl.exceptions import CryptoError
 from unittest.mock import patch
 import sys, os
-#print(sys.executable)
-#sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src"))
-#from Encryption import Encryption, ExtendedEncryption
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 from src.networkProtocols.Encryption import Encryption, ExtendedEncryption
-# ── Shared test vectors ────────────────────────────────────────────────────────
+
 T_CLIENT_PRIVATE_KEY = b'\x99x\x93eP\xdd\xb7h\xd5dJ\xc7\xa5~\x83\xbdX\x04M\xe29\x15\xe2\xf1\xe8\xd8VFk0\xf8\xa1'
 T_SERVER_PUBLIC_KEY  = b'f,^\xc0Cb\xf3\x937\xbf\x11\x14"\xed\x13\x0b\x9f\xe7\xaf;\x94\xb0p\x13\xe1\x94\xdd\x85\xcf\x01\x0bC'
 
@@ -29,7 +27,7 @@ def make_protocol() -> Encryption:
     return ep
 
 
-# ── Tests ──────────────────────────────────────────────────────────────────────
+#Tests
 
 class TestConstructor(unittest.TestCase):
 
@@ -233,12 +231,7 @@ class TestTimestamp(unittest.TestCase):
 
 
 class TestHandshake(unittest.TestCase):
-    """Tests for send_prep, receive_prep, and the full handshake flow.
-
-    send_prep calls DH_Generate() for a fresh ephemeral keypair and
-    time.time() for the timestamp — both of which must be fixed to match
-    the worked-example values.
-    """
+    #Tests for send_prep, receive_prep, and the full handshake flow.
 
     # Fixed values from the worked example
     FIXED_TIME      = 1744377020.21733
@@ -303,11 +296,10 @@ class TestHandshake(unittest.TestCase):
 
 
 class TestTransport(unittest.TestCase):
-    """Tests for encrypt_transport / decrypt_transport roundtrip."""
+    #Tests for encrypt_transport / decrypt_transport roundtrip.
 
     def setUp(self):
         self.ep = make_protocol()
-        # Inject known session keys directly
         self.ep.sending_key   = b'\xd0\x98\xff\xa8\xf4u&\xc4$\x94\xcd&*X\xbfc\x91_\xc3ls\xd1\x1f\xff=\xd4<\x92\xc6\xb5\xb0q'
         self.ep.receiving_key = b'\x032\xb2\xbe\xae"<\'}\x97\x08@w\x98\x10l\xb9\xd4|\xc7\x02\xc4\xefE\x18K\x05\x92\xe0d\x8e\xce'
         self.ep.server_index  = 0x12345678
@@ -326,7 +318,7 @@ class TestTransport(unittest.TestCase):
         self.assertEqual(self.ep.N_send, 2)
 
     def test_encrypt_decrypt_roundtrip(self):
-        """Swap send/recv keys to simulate both sides of the channel."""
+        #Swap send/recv keys to simulate both sides of the channel.
         plaintext = b"secret message"
         packet = self.ep.encrypt_transport(plaintext)
 
@@ -363,7 +355,7 @@ class TestExtendedEncryption(unittest.TestCase):
         self.assertIsInstance(ep.client_private_key, nacl.public.PrivateKey)
 
     def _build_packet(self, cookie=None):
-        """Helper: builds a packet with fixed ephemeral key and timestamp."""
+        #Helper: builds a packet with fixed ephemeral key and timestamp.
         FIXED_TIME     = 1744377020.21733
         FIXED_E_I_PRIV = b'\xac\x03\x18b0\xc4\xf7\xd4*\xa7-\x81&\xfb\xc7\xb3PG0\xae\xa4y0\x90\xe2\xe4\xe2\xa0g\\\x83\xb6'
 
@@ -404,7 +396,7 @@ class TestExtendedEncryption(unittest.TestCase):
         self.assertEqual(len(packet_no_cookie), len(packet_with_cookie))
 
     def test_mac1_changes_between_packets(self):
-        """Different ephemeral keys should produce different mac1 values."""
+        #Different ephemeral keys should produce different mac1 values.
         self._build_packet()
         mac1_first = self.ep.mac1
         self._build_packet()
@@ -414,7 +406,7 @@ class TestExtendedEncryption(unittest.TestCase):
         self.assertEqual(len(mac1_second), 16)
 
     def _make_cookie_reply(self, cookie_plaintext: bytes, mac1: bytes) -> bytes:
-        """Construct a synthetic type-0x03 cookie reply packet."""
+        #Construct a synthetic type-0x03 cookie reply packet.
         key   = self.ep.Hash(b"cookie--" + T_SERVER_PUBLIC_KEY)
         nonce = bytes(range(24))  # deterministic 24-byte nonce for testing
         ct    = nacl.bindings.crypto_aead_xchacha20poly1305_ietf_encrypt(cookie_plaintext, mac1, nonce, key)
@@ -444,7 +436,7 @@ class TestExtendedEncryption(unittest.TestCase):
             self.ep.parse_cookie_reply(reply)
 
     def test_full_extended_flow(self):
-        """build_send_packet → parse_cookie_reply → build_send_packet with cookie."""
+        #build_send_packet → parse_cookie_reply → build_send_packet with cookie.
         from cryptography.exceptions import InvalidTag
 
         # Step 1: initial handshake packet

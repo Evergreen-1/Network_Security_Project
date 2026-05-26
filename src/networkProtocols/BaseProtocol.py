@@ -1,4 +1,7 @@
 # KRNRUA001
+# abstract class that allows higher levels to interface
+# with lower levels without having to know which
+# specific protocol is being used
 
 from abc import ABC, abstractmethod
 

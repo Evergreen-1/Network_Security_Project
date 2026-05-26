@@ -1,4 +1,6 @@
 # KRNRUA001
+# int enum class containing all request and response opcodes
+# (no magic numbers :])
 
 from enum import IntEnum
 

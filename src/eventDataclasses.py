@@ -1,4 +1,5 @@
 # KRNRUA001
+# dataclasses representing different unsolicited response events
 
 from dataclasses import dataclass
 
