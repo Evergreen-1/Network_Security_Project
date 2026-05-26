@@ -148,11 +148,14 @@ class ChatUI(customtkinter.CTk, AsyncCTk):
     
     async def updateUsers(self):
        while self.transportProtocolInUse:
-          self.users = await self.transportProtocolInUse.list_users()
-          print("Found list of users: ", self.users)
           
-          if self.frames["ChattingFrame"].chatListFrame.segbtnChatType.get()=="Online Users":
-              self.frames["ChattingFrame"].chatListFrame.selectChatType("Online Users")
+          try:
+          
+              self.users = await self.transportProtocolInUse.list_users()
+              print("Found list of users: ", self.users)
+          
+              if self.frames["ChattingFrame"].chatListFrame.segbtnChatType.get()=="Online Users":
+                  self.frames["ChattingFrame"].chatListFrame.selectChatType("Online Users")
           
           #for user in self.users:
           #    if (not (user in newUsersList)):
@@ -160,17 +163,20 @@ class ChatUI(customtkinter.CTk, AsyncCTk):
           #        while (userMessages[i][0] != user):
           #            i += 1
           #        usermessages.pop(i)
-          await asyncio.sleep(60)
+              await asyncio.sleep(60)
+          except Exception as e:
+              print("Update user error:", e)
     
     async def updateChannels(self):
        while self.transportProtocolInUse:
-          self.channels = await self.transportProtocolInUse.list_channels()
-          print("Found list of channels: ", self.channels)
-          
-          if self.frames["ChattingFrame"].chatListFrame.segbtnChatType.get()=="Available Channels":
-              self.frames["ChattingFrame"].chatListFrame.selectChatType("Available Channels")
-          
-          await asyncio.sleep(60)
+          try:          
+              self.channels = await self.transportProtocolInUse.list_channels()
+              print("Found list of channels: ", self.channels)
+              if self.frames["ChattingFrame"].chatListFrame.segbtnChatType.get()=="Available Channels":
+                  self.frames["ChattingFrame"].chatListFrame.selectChatType("Available Channels")
+              await asyncio.sleep(60)
+          except Exception as e:
+              print("Update channel error:", e)
     
     def changeFrame(self, frameName):
         
@@ -586,7 +592,7 @@ class Chatting_MessageListFrame(customtkinter.CTkFrame):
         self.controller = controller
 
         self.chatName = customtkinter.CTkLabel(self, text="ChannelName", font=controller.headingFont, text_color=controller.textColour)
-        self.chatName.place(relx=0.125, rely=0.06, relheight=0.08, anchor=customtkinter.CENTER)
+        self.chatName.place(relx=0.5, rely=0.06, relheight=0.08, anchor=customtkinter.CENTER)
 
         self.messageEnterFrame = customtkinter.CTkFrame(master=self)
         self.messageEnterFrame.place(relx=0.5, rely=0.93, relwidth=0.95, relheight=0.1, anchor="center")
@@ -776,7 +782,7 @@ class ChangeUsernameFrame(customtkinter.CTkFrame):
                 self.entryUsername.delete(0, "end")
                 self.entryUsername.insert(0, "clear-" + username[5:20])
         
-        if len(username) < 7:
+        if len(username) < 7 and self.controller.isCleartext:
             valid = False
         
         if not valid:
