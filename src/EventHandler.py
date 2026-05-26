@@ -89,7 +89,7 @@ class Handler():
     def onServerMessage(self, event: ServerMessageEvent):
         msgTime = datetime.now().strftime("%H:%M:%S")
         self.controller.channelMessages[0][1].append({"sender":"Server", "text": event.message, "time":msgTime})
-        if self.controller.showChannel == True and self.controller.currentChat == event.channel:
+        if self.controller.showChannel == True and self.controller.currentChat == "Server":
             self.updateMessages(self.controller.frames["ChattingFrame"].msgListFrame.messageListFrame, self.controller, self.controller.channelMessages[0][1])
         print(f"[SERVER]: {event.message}")
 
